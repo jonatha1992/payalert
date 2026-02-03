@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     let response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -58,14 +58,21 @@ export async function middleware(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    // Protect /admin routes
-    if (request.nextUrl.pathname.startsWith('/admin') && !user) {
+    console.log(`[Proxy] Path: ${request.nextUrl.pathname}, User: ${user ? user.email : 'None'}`)
+
+    // Protect /admin and /dashboard routes
+    const isProtectedPath = request.nextUrl.pathname.startsWith('/admin') || 
+                            request.nextUrl.pathname.startsWith('/dashboard')
+    
+    if (isProtectedPath && !user) {
+        console.log(`[Proxy] Redirecting to /login from ${request.nextUrl.pathname}`)
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Redirect authenticated users from /login to /admin
+    // Redirect authenticated users from /login
     if (request.nextUrl.pathname === '/login' && user) {
-        return NextResponse.redirect(new URL('/admin', request.url))
+        console.log(`[Proxy] Authenticated user on /login, redirecting to /dashboard`)
+        return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
     return response

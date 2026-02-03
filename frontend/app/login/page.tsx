@@ -25,7 +25,18 @@ export default function LoginPage() {
 
             if (error) throw error;
 
-            router.push('/admin');
+            // Obtenemos el perfil para saber a dónde redirigir
+            const { data: profile } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', (await supabase.auth.getUser()).data.user?.id)
+                .single();
+
+            if (profile?.role === 'admin') {
+                window.location.href = '/admin';
+            } else {
+                window.location.href = '/dashboard';
+            }
         } catch (err: any) {
             setError(err.message);
         } finally {

@@ -2,27 +2,33 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Store, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Store, Settings, LogOut, Users, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 const menuItems = [
     { name: 'Panel Principal', href: '/admin', icon: LayoutDashboard },
-    { name: 'Negocios', href: '/admin/businesses', icon: Store },
+    { name: 'Gestionar Negocios', href: '/admin/businesses', icon: Store },
+    { name: 'Usuarios Globales', href: '/admin/users', icon: Users },
     { name: 'Configuración', href: '/admin/settings', icon: Settings },
 ];
 
 export default function AdminSidebar() {
     const pathname = usePathname();
-    const { signOut } = useAuth();
+    const { signOut, profile } = useAuth();
 
     return (
-        <aside className="w-64 bg-gray-900 text-white min-h-screen p-4 flex flex-col">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-600">
-                    PayAlert Admin
-                </h1>
+        <aside className="w-64 bg-slate-950 text-white min-h-screen p-4 flex flex-col border-r border-slate-800 shadow-2xl">
+            <div className="mb-10 px-4 pt-4">
+                <div className="flex items-center space-x-2 text-blue-500 mb-1">
+                    <ShieldCheck size={28} />
+                    <h1 className="text-2xl font-black tracking-tighter">PayAlert</h1>
+                </div>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full inline-block">
+                    Admin Platform
+                </p>
             </div>
-            <nav className="space-y-2 flex-1">
+            
+            <nav className="space-y-1.5 flex-1">
                 {menuItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href;
@@ -30,24 +36,30 @@ export default function AdminSidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                ? 'bg-blue-600 text-white'
-                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                            className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 ${isActive
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
                                 }`}
                         >
-                            <Icon size={20} />
-                            <span>{item.name}</span>
+                            <Icon size={20} className={isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'} />
+                            <span className="font-semibold text-sm">{item.name}</span>
                         </Link>
                     );
                 })}
             </nav>
-            <div className="mt-auto">
+
+            <div className="mt-auto border-t border-slate-900 pt-6 pb-2">
+                <div className="px-4 py-3 mb-6 bg-slate-900/50 rounded-2xl border border-slate-800/50">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Administrador</p>
+                    <p className="text-sm font-bold text-slate-200 truncate">{profile?.first_name || 'Admin'} {profile?.last_name || ''}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{profile?.role === 'admin' ? 'Acceso Total' : 'Restringido'}</p>
+                </div>
                 <button
                     onClick={() => signOut()}
-                    className="flex items-center space-x-3 px-4 py-3 w-full rounded-lg text-red-400 hover:bg-gray-800 transition-colors"
+                    className="flex items-center space-x-3 px-4 py-3 w-full rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-300 group"
                 >
-                    <LogOut size={20} />
-                    <span>Cerrar Sesión</span>
+                    <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
+                    <span className="font-bold text-sm">Cerrar Sesión</span>
                 </button>
             </div>
         </aside>
