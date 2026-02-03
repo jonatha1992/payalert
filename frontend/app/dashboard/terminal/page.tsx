@@ -126,7 +126,7 @@ export default function TerminalPage() {
                             <Bell className="w-8 h-8 text-gray-400" />
                         </div>
                         <h3 className="text-gray-900 dark:text-white font-medium">Sin notificaciones</h3>
-                        <p className="text-sm text-gray-500 mt-1">Las nuevas alertas aparecerán aquí.</p>
+                        <p className="text-sm text-gray-500 mt-1">Las nuevas notificaciones aparecerán aquí automáticamente.</p>
                     </div>
                 ) : (
                     feed.map(item => (

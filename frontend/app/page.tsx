@@ -26,7 +26,7 @@ export default function Home() {
             PayAlert
           </h1>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto font-medium leading-relaxed">
-            La solución definitiva para que tus negocios reciban notificaciones de pagos instantáneas de Mercado Pago y Ualá.
+            La solución definitiva para que tus negocios reciban notificaciones de pagos instantáneas de Mercado Pago y Ualá Bis.
           </p>
         </div>
 
@@ -45,7 +45,7 @@ export default function Home() {
           {[
             { title: 'Gestión Total', desc: 'Panel centralizado para administrar todos tus clientes y negocios.', icon: ShieldCheck },
             { title: 'Multisucursal', desc: 'Permite que tus clientes gestionen todas sus tiendas desde un solo lugar.', icon: Store },
-            { title: 'Pago Seguro', desc: 'Integración certificada con las principales pasarelas de pago.', icon: Zap }
+            { title: 'Pagos Seguros', desc: 'Integración certificada con las principales pasarelas de pago.', icon: Zap }
           ].map((feat, i) => (
             <div key={i} className="text-left space-y-3">
               <div className="text-blue-500 bg-blue-500/10 w-10 h-10 rounded-lg flex items-center justify-center">

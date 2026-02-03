@@ -123,7 +123,7 @@ function EmployeeTerminal({ profile }: { profile: any }) {
                         
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Esperando pagos...</h2>
                         <p className="text-gray-500 dark:text-gray-400 max-w-sm">
-                            Mantén esta pantalla abierta. Las notificaciones de cobro de Mercado Pago y Ualá aparecerán aquí automáticamente.
+                            Mantén esta pantalla abierta. Las notificaciones de cobro de Mercado Pago y Ualá Bis aparecerán aquí automáticamente.
                         </p>
                     </>
                 ) : (
@@ -136,7 +136,7 @@ function EmployeeTerminal({ profile }: { profile: any }) {
                                      </div>
                                      <div className="text-left">
                                          <p className="text-sm text-emerald-600 dark:text-emerald-400 font-bold mb-1">
-                                             {payment.provider === 'mercadopago' ? 'Mercado Pago' : 'Ualá'}
+                                             {payment.provider === 'mercadopago' ? 'Mercado Pago' : 'Ualá Bis'}
                                          </p>
                                          <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                                              ${payment.amount}
