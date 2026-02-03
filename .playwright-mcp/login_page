@@ -1,0 +1,24 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Bienvenido" [level=2] [ref=e5]
+      - paragraph [ref=e6]: Inicia sesión para gestionar tu negocio
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Correo Electrónico
+          - generic [ref=e10]:
+            - generic:
+              - img
+            - textbox "usuario@ejemplo.com" [ref=e11]
+        - generic [ref=e12]:
+          - generic [ref=e13]: Contraseña
+          - generic [ref=e14]:
+            - generic:
+              - img
+            - textbox "••••••••" [ref=e15]
+        - button "Ingresar" [ref=e16]
+    - paragraph [ref=e18]: ¿No tienes una cuenta? Contacta a tu administrador.
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e24] [cursor=pointer]:
+    - img [ref=e25]
+  - alert [ref=e28]

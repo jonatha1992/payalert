@@ -29,7 +29,9 @@ export default function BusinessesPage() {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setBusinesses(data || []);
+            // Filter out the 'PayAlert' platform entry if it exists
+            const filteredData = (data || []).filter(b => b.name !== 'PayAlert');
+            setBusinesses(filteredData);
         } catch (err: any) {
             setError(err.message);
         } finally {
