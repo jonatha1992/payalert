@@ -47,12 +47,12 @@ export default function Home() {
             { title: 'Multisucursal', desc: 'Permite que tus clientes gestionen todas sus tiendas desde un solo lugar.', icon: Store },
             { title: 'Pagos Seguros', desc: 'Integración certificada con las principales pasarelas de pago.', icon: Zap }
           ].map((feat, i) => (
-            <div key={i} className="text-left space-y-3">
+            <div key={i} className="flex flex-col items-center text-center space-y-3">
               <div className="text-blue-500 bg-blue-500/10 w-10 h-10 rounded-lg flex items-center justify-center">
                 <feat.icon size={20} />
               </div>
               <h3 className="font-bold text-slate-200">{feat.title}</h3>
-              <p className="text-sm text-slate-500 leading-relaxed">{feat.desc}</p>
+              <p className="text-sm text-slate-500 leading-relaxed max-w-[20rem]">{feat.desc}</p>
             </div>
           ))}
         </div>
