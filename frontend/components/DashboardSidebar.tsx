@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Store, CreditCard, Users, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Store, CreditCard, Users, Settings, LogOut, FileText, DollarSign } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 export default function DashboardSidebar() {
@@ -12,8 +12,9 @@ export default function DashboardSidebar() {
     const ownerItems = [
         { name: 'Mi Dashboard', href: '/dashboard', icon: LayoutDashboard },
         { name: 'Mis Sucursales', href: '/dashboard/stores', icon: Store },
+        { name: 'Reportes', href: '/dashboard/reports', icon: FileText },
         { name: 'Integraciones', href: '/dashboard/integrations', icon: CreditCard },
-        { name: 'Gastos', href: '/dashboard/expenses', icon: CreditCard }, // Using CreditCard temporarily or DollarSign if imported
+        { name: 'Gastos', href: '/dashboard/expenses', icon: DollarSign },
         { name: 'Empleados', href: '/dashboard/employees', icon: Users },
         { name: 'Configuración', href: '/dashboard/settings', icon: Settings },
     ];

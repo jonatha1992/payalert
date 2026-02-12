@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, X, Store, Bell, Check } from 'lucide-react';
+import { Settings, X, Store, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
+import PushNotificationSettings from '@/components/PushNotificationSettings';
 
 export default function DashboardSettingsPage() {
     const { profile } = useAuth();
@@ -85,7 +86,9 @@ export default function DashboardSettingsPage() {
                         <h2 className="text-lg font-medium text-gray-900 dark:text-white">Notificaciones</h2>
                     </div>
                     
-                    <div className="space-y-4 max-w-md">
+                    <PushNotificationSettings />
+                    
+                    <div className="mt-6 space-y-4 max-w-md">
                         <div className="flex items-center justify-between">
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alertas Visuales (Toast)</label>
                             <button 
