@@ -22,6 +22,7 @@ interface ConnectionView {
     providerAccountId: string | null;
     status: string;
     hasWebhookSecret: boolean;
+    lastSyncAt: string | null;
 }
 
 interface CreateConnectionInput {
@@ -126,19 +127,39 @@ export default function IntegrationsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('¿Eliminar esta integración? Dejarás de recibir alertas.')) return;
-        try {
-            const response = await fetch(`/api/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Error al eliminar integración');
-            setConnections(previous => previous.filter(connection => connection.id !== id));
-            toast.success('Integración eliminada');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Error al eliminar integración');
-        }
-    };
+            if (!confirm('¿Eliminar esta integración? Dejarás de recibir alertas.')) return;
+            try {
+                const response = await fetch(`/api/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Error al eliminar integración');
+                setConnections(previous => previous.filter(connection => connection.id !== id));
+                toast.success('Integración eliminada');
+            } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Error al eliminar integración');
+            }
+        };
 
-    return (
+        const checkHealth = async (id: string) => {
+            setLoading(true);
+            try {
+                const response = await fetch(`/api/integrations/${encodeURIComponent(id)}/health`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Error en verificación');
+                setConnections(previous => previous.map(c => c.id === id ? { ...c, lastSyncAt: new Date().toISOString(), status: data.ok ? 'CONNECTED' : 'ERROR' } : c));
+                toast.success(data.ok ? 'Conexión verificada correctamente' : `Verificación falló: ${data.detail}`);
+            } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Error al verificar');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const time = (iso: string) => {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+        };
+
+        return (
         <div className="space-y-8">
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Integraciones</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -178,11 +199,15 @@ export default function IntegrationsPage() {
                                     <div className="flex items-center text-sm text-gray-500 dark:text-gray-400"><MapPin size={14} className="mr-1" />{connection.storeName || 'Todas las Sucursales (General)'}</div>
                                     {connection.providerAccountId && <p className="text-sm text-gray-500 dark:text-gray-400">Cuenta: ••••{connection.providerAccountId.slice(-4)}</p>}
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                                        <span className={`px-2 py-1 rounded-full ${statusClass(connection.status)}`}>{connection.status}</span>
-                                        {connection.hasWebhookSecret && <span className="text-gray-500 dark:text-gray-400">firma configurada</span>}
-                                    </div>
-                                </div>
-                                <button onClick={() => void handleDelete(connection.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Eliminar integración"><Trash2 size={18} /></button>
+                                                                            <span className={`px-2 py-1 rounded-full ${statusClass(connection.status)}`}>{connection.status}</span>
+                                                                            {connection.hasWebhookSecret && <span className="text-gray-500 dark:text-gray-400">firma configurada</span>}
+                                                                            {connection.lastSyncAt && <span className="text-gray-400 dark:text-gray-500">última verificación: {time(connection.lastSyncAt)}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button onClick={() => void checkHealth(connection.id)} disabled={loading || connection.status === 'DISCONNECTED'} className="px-3 py-1.5 text-xs border border-current rounded-lg disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800">Verificar</button>
+                                                                        <button onClick={() => void handleDelete(connection.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Eliminar integración"><Trash2 size={18} /></button>
+                                                                    </div>
                             </div>
                         ))}
                     </div>
