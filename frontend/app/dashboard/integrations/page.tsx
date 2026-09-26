@@ -1,328 +1,233 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect } from 'react';
-import { CreditCard, Wallet, X, Save, Eye, EyeOff, MapPin, Trash2 } from 'lucide-react';
+import { useState, useEffect, type FormEvent } from 'react';
+import { CreditCard, Wallet, X, MapPin, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
+
+type Provider = 'mercado_pago' | 'uala' | 'mock';
 
 interface Store {
     id: string;
     name: string;
 }
 
-interface PaymentToken {
+interface ConnectionView {
     id: string;
-    provider: 'mercado_pago' | 'uala';
-    store_id: string | null;
-    is_active: boolean;
-    created_at: string;
-    store?: { name: string };
-    metadata?: any;
+    provider: Provider;
+    storeId: string | null;
+    storeName: string | null;
+    label: string | null;
+    providerAccountId: string | null;
+    status: string;
+    hasWebhookSecret: boolean;
 }
 
-interface IntegrationConfig {
-    provider: 'mercado_pago' | 'uala';
-    title: string;
-    fields: { key: string; label: string; type: 'text' | 'password' }[];
+interface CreateConnectionInput {
+    provider: Provider;
+    storeId?: string | null;
+    label?: string | null;
+    accessToken?: string;
+    webhookSecret?: string;
+    username?: string;
+    clientId?: string;
+    clientSecretId?: string;
+    environment?: 'production' | 'stage';
+    amountInCents?: boolean;
+}
+
+const providerNames = { mercado_pago: 'Mercado Pago', uala: 'Ualá Bis', mock: 'Proveedor de prueba' };
+const inputClass = 'w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none';
+
+function statusClass(status: string) {
+    if (status === 'CONNECTED') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    if (status === 'DEGRADED' || status === 'REAUTH_REQUIRED') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+    if (status === 'ERROR') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+    return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
 }
 
 export default function IntegrationsPage() {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [stores, setStores] = useState<Store[]>([]);
-    const [tokens, setTokens] = useState<PaymentToken[]>([]);
-    
-    // Modal State
-    const [selectedProvider, setSelectedProvider] = useState<IntegrationConfig | null>(null);
-    const [formData, setFormData] = useState<Record<string, string>>({});
-    const [selectedStoreId, setSelectedStoreId] = useState<string>('');
-    const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+    const [connections, setConnections] = useState<ConnectionView[]>([]);
+    const [selectedProvider, setSelectedProvider] = useState<'mercado_pago' | 'uala' | null>(null);
+    const [webhookUrl, setWebhookUrl] = useState('');
 
     useEffect(() => {
-        if (profile?.business_id) {
-            fetchData();
-        }
-    }, [profile]);
+        if (!profile?.business_id) return;
+        const controller = new AbortController();
+        const fetchData = async () => {
+            try {
+                const [response, storesResult] = await Promise.all([
+                    fetch('/api/integrations', { signal: controller.signal, cache: 'no-store' }),
+                    supabase.from('stores').select('id, name').eq('business_id', profile.business_id),
+                ]);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Error al cargar integraciones');
+                if (storesResult.error) throw new Error('Error al cargar sucursales');
+                if (!controller.signal.aborted) {
+                    setConnections(data.connections);
+                    setStores(storesResult.data ?? []);
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : 'Error al cargar integraciones');
+            }
+        };
+        void fetchData();
+        return () => controller.abort();
+    }, [profile?.business_id]);
 
-    const fetchData = async () => {
-        try {
-            const [storesRes, tokensRes] = await Promise.all([
-                supabase.from('stores').select('id, name').eq('business_id', profile?.business_id),
-                supabase.from('payment_tokens').select('*, store:stores(name)').eq('business_id', profile?.business_id)
-            ]);
-
-            if (storesRes.data) setStores(storesRes.data);
-            if (tokensRes.data) setTokens(tokensRes.data);
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            toast.error('Error al cargar integraciones');
-        }
-    };
-
-    const handleOpenConfig = (provider: 'mercado_pago' | 'uala') => {
-        if (provider === 'mercado_pago') {
-            setSelectedProvider({
-                provider: 'mercado_pago',
-                title: 'Mercado Pago',
-                fields: [
-                    { key: 'access_token', label: 'Access Token', type: 'password' },
-                    { key: 'public_key', label: 'Public Key', type: 'text' }
-                ]
-            });
-        } else {
-            setSelectedProvider({
-                provider: 'uala',
-                title: 'Ualá Bis',
-                fields: [
-                    { key: 'client_id', label: 'Client ID', type: 'text' },
-                    { key: 'client_secret', label: 'Client Secret', type: 'password' },
-                    { key: 'username', label: 'Username', type: 'text' },
-                    { key: 'password', label: 'Password', type: 'password' }
-                ]
-            });
-        }
-        setFormData({});
-        setSelectedStoreId('');
-        setShowSecrets({});
-    };
-
-    const handleSave = async () => {
-        if (!profile?.business_id || !selectedProvider) return;
+    const connect = async (input: CreateConnectionInput) => {
         setLoading(true);
-
         try {
-            // Build key value depending on form
-            // For simplicity, we store the MAIN secret as 'token_value' and others in 'metadata'
-            // MP: token_value = Access Token
-            // Uala: token_value = Client Secret (or we might need a simpler mapping)
-            
-            let tokenValue = '';
-            let metadata = {};
-
-            if (selectedProvider.provider === 'mercado_pago') {
-                tokenValue = formData['access_token'];
-                metadata = { public_key: formData['public_key'] };
-            } else {
-                tokenValue = formData['client_secret'];
-                metadata = { 
-                    client_id: formData['client_id'],
-                    username: formData['username'],
-                    password: formData['password'] // Note: Storing password in metadata is not ideal security, but required for auth flow if no token exchange exists yet.
-                };
-            }
-
-            if (!tokenValue) {
-                toast.error('Por favor completa los campos requeridos');
-                setLoading(false);
-                return;
-            }
-
-            const { error } = await supabase
-                .from('payment_tokens')
-                .insert([{
-                    business_id: profile.business_id,
-                    provider: selectedProvider.provider,
-                    token_type: 'access', // Default
-                    token_value: tokenValue,
-                    store_id: selectedStoreId || null,
-                    metadata: metadata,
-                    is_active: true,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (error) throw error;
-            
-            toast.success('Integración guardada exitosamente');
-            await fetchData();
+            const response = await fetch('/api/integrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(input),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Error al guardar integración');
+            setConnections(previous => [data.connection, ...previous]);
             setSelectedProvider(null);
-        } catch (error: any) {
-            console.error('Error saving integration:', error);
-            toast.error('Error al guardar: ' + error.message);
+            toast.success('Integración guardada exitosamente');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Error al guardar integración');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDeleteToken = async (id: string) => {
-        if (!confirm('¿Eliminar esta integración? Dejarás de recibir alertas.')) return;
-        try {
-            const { error } = await supabase.from('payment_tokens').delete().eq('id', id);
-            if (error) throw error;
-            toast.success('Integración eliminada');
-            fetchData();
-        } catch (error: any) {
-            toast.error('Error al eliminar');
-        }
+    const handleSave = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!selectedProvider || loading) return;
+        const form = event.currentTarget;
+        const data = new FormData(form);
+        const value = (key: string) => String(data.get(key) ?? '').trim();
+        const input: CreateConnectionInput = {
+            provider: selectedProvider,
+            label: value('label') || null,
+            storeId: value('storeId') || null,
+            ...(selectedProvider === 'mercado_pago' ? {
+                accessToken: value('accessToken'),
+                webhookSecret: value('webhookSecret'),
+            } : {
+                username: value('username'),
+                clientId: value('clientId'),
+                clientSecretId: value('clientSecretId'),
+                environment: value('environment') === 'stage' ? 'stage' as const : 'production' as const,
+                amountInCents: data.get('amountInCents') === 'on',
+            }),
+        };
+        // Clear credentials immediately, including when the request fails.
+        form.reset();
+        void connect(input);
     };
 
-    const getProviderName = (p: string) => p === 'mercado_pago' ? 'Mercado Pago' : 'Ualá Bis';
+    const handleDelete = async (id: string) => {
+        if (!confirm('¿Eliminar esta integración? Dejarás de recibir alertas.')) return;
+        try {
+            const response = await fetch(`/api/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Error al eliminar integración');
+            setConnections(previous => previous.filter(connection => connection.id !== id));
+            toast.success('Integración eliminada');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Error al eliminar integración');
+        }
+    };
 
     return (
         <div className="space-y-8">
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Integraciones</h1>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Mercado Pago Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col justify-between">
-                    <div>
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="bg-blue-100 dark:bg-blue-900/30 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
-                                <Wallet size={24} />
+                {(['mercado_pago', 'uala'] as const).map(provider => (
+                    <div key={provider} className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col justify-between">
+                        <div>
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${provider === 'mercado_pago' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400'}`}>
+                                {provider === 'mercado_pago' ? <Wallet size={24} /> : <CreditCard size={24} />}
                             </div>
+                            <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">{providerNames[provider]}</h3>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">Conecta tu cuenta para recibir confirmaciones de pagos.</p>
                         </div>
-                        <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Mercado Pago</h3>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            Conecta cuentas de Mercado Pago para procesar cobros QR.
-                        </p>
+                        <button disabled={loading} onClick={() => {
+                            setWebhookUrl(`${window.location.origin}/api/webhooks/mercadopago`);
+                            setSelectedProvider(provider);
+                        }} className={`mt-6 w-full py-2 text-white rounded-lg font-medium transition-colors disabled:opacity-50 ${provider === 'mercado_pago' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-pink-600 hover:bg-pink-700'}`}>
+                            Agregar Cuenta
+                        </button>
                     </div>
-                    <button 
-                        onClick={() => handleOpenConfig('mercado_pago')}
-                        className="mt-6 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        Agregar Cuenta
-                    </button>
-                </div>
-
-                {/* Uala Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col justify-between">
-                    <div>
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="bg-pink-100 dark:bg-pink-900/30 w-12 h-12 rounded-lg flex items-center justify-center text-pink-600 dark:text-pink-400">
-                                <CreditCard size={24} />
-                            </div>
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Ualá Bis</h3>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            Conecta terminales de Ualá Bis.
-                        </p>
+                ))}
+                {process.env.NODE_ENV !== 'production' && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                        <h3 className="font-semibold text-gray-800 dark:text-white">Proveedor de prueba</h3>
+                        <button disabled={loading} onClick={() => void connect({ provider: 'mock' })} className="mt-3 px-4 py-2 bg-gray-700 text-white rounded-lg disabled:opacity-50">Conectar proveedor de prueba</button>
                     </div>
-                    <button 
-                         onClick={() => handleOpenConfig('uala')}
-                        className="mt-6 w-full py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        Agregar Cuenta
-                    </button>
-                </div>
+                )}
             </div>
 
-            {/* List of Active Integrations */}
             <div>
                 <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Cuentas Conectadas</h2>
-                {tokens.length === 0 ? (
-                    <p className="text-gray-500 dark:text-gray-400 text-sm italic">No tienes cuentas conectadas.</p>
-                ) : (
+                {connections.length === 0 ? <p className="text-gray-500 dark:text-gray-400 text-sm italic">No tienes cuentas conectadas.</p> : (
                     <div className="grid gap-4">
-                        {tokens.map(token => (
-                            <div key={token.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
-                                <div className="flex items-center space-x-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${token.provider === 'mercado_pago' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
-                                        {token.provider === 'mercado_pago' ? <Wallet size={20} /> : <CreditCard size={20} />}
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold text-gray-900 dark:text-white">{getProviderName(token.provider)}</h4>
-                                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                                            <MapPin size={14} className="mr-1" />
-                                            {token.store?.name || 'Todas las Sucursales (General)'}
-                                        </div>
+                        {connections.map(connection => (
+                            <div key={connection.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm gap-3">
+                                <div className="min-w-0 space-y-1">
+                                    <h4 className="font-semibold text-gray-900 dark:text-white">{providerNames[connection.provider]}{connection.label && ` · ${connection.label}`}</h4>
+                                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400"><MapPin size={14} className="mr-1" />{connection.storeName || 'Todas las Sucursales (General)'}</div>
+                                    {connection.providerAccountId && <p className="text-sm text-gray-500 dark:text-gray-400">Cuenta: ••••{connection.providerAccountId.slice(-4)}</p>}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                        <span className={`px-2 py-1 rounded-full ${statusClass(connection.status)}`}>{connection.status}</span>
+                                        {connection.hasWebhookSecret && <span className="text-gray-500 dark:text-gray-400">firma configurada</span>}
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => handleDeleteToken(token.id)}
-                                    className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                                    title="Eliminar integración"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
+                                <button onClick={() => void handleDelete(connection.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Eliminar integración"><Trash2 size={18} /></button>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* Config Modal */}
             {selectedProvider && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 relative shadow-xl">
-                        <button 
-                            onClick={() => setSelectedProvider(null)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        >
-                            <X size={24} />
-                        </button>
-                        
-                        <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
-                            Conectar {selectedProvider.title}
-                        </h2>
-
-                        <div className="space-y-4">
-                            {/* Store Selector */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Asignar a Sucursal
-                                </label>
-                                <div className="relative">
-                                    <MapPin size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                                    <select
-                                        className="w-full pl-10 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                                        value={selectedStoreId}
-                                        onChange={e => setSelectedStoreId(e.target.value)}
-                                    >
-                                        <option value="">General (Todas)</option>
-                                        {stores.map(store => (
-                                            <option key={store.id} value={store.id}>{store.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Si seleccionas "General", esta cuenta procesará pagos no asignados a una sucursal específica.
-                                </p>
-                            </div>
-
-                            {selectedProvider.fields.map((field) => (
-                                <div key={field.key}>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div role="dialog" aria-modal="true" aria-labelledby="integration-title" className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative shadow-xl">
+                        <button disabled={loading} onClick={() => setSelectedProvider(null)} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={24} /></button>
+                        <h2 id="integration-title" className="text-2xl font-bold mb-6 pr-6 text-gray-900 dark:text-white">Conectar {providerNames[selectedProvider]}</h2>
+                        <form onSubmit={handleSave}>
+                            <fieldset disabled={loading} className="space-y-4">
+                                {(selectedProvider === 'mercado_pago' ? [
+                                    { name: 'accessToken', label: 'Access Token', type: 'password' },
+                                    { name: 'webhookSecret', label: 'Webhook secret signature', type: 'password' },
+                                ] : [
+                                    { name: 'username', label: 'Username', type: 'text' },
+                                    { name: 'clientId', label: 'client_id', type: 'text' },
+                                    { name: 'clientSecretId', label: 'client_secret_id', type: 'password' },
+                                ]).map(field => (
+                                    <label key={field.name} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         {field.label}
+                                        <input name={field.name} type={field.type} required autoComplete="off" className={`${inputClass} mt-1`} />
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type={field.type === 'password' && showSecrets[field.key] ? 'text' : field.type}
-                                            value={formData[field.key] || ''}
-                                            onChange={(e) => setFormData({...formData, [field.key]: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                            placeholder={`Ingresa tu ${field.label}`}
-                                        />
-                                        {field.type === 'password' && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowSecrets(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
-                                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                                            >
-                                                {showSecrets[field.key] ? <EyeOff size={18} /> : <Eye size={18} />}
-                                            </button>
-                                        )}
-                                    </div>
+                                ))}
+                                {selectedProvider === 'uala' && <>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Entorno
+                                        <select name="environment" className={`${inputClass} mt-1`} defaultValue="production"><option value="production">production</option><option value="stage">stage</option></select>
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" name="amountInCents" />Enviar montos en centavos</label>
+                                </>}
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Etiqueta (opcional)<input name="label" className={`${inputClass} mt-1`} /></label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal (opcional)
+                                    <select name="storeId" className={`${inputClass} mt-1`} defaultValue=""><option value="">General (Todas)</option>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select>
+                                </label>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 break-words">
+                                    {selectedProvider === 'mercado_pago' ? <>Configura el webhook <span className="font-mono">{webhookUrl}</span>, evento &quot;Pagos&quot;. El secreto se obtiene en Tus integraciones &gt; Webhooks.</> : 'Las notificaciones llegan automáticamente para los cobros creados desde PayAlert.'}
+                                </p>
+                                <div className="pt-4 flex gap-3">
+                                    <button type="button" onClick={() => setSelectedProvider(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200">Cancelar</button>
+                                    <button type="submit" className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50" disabled={loading}>{loading ? 'Guardando...' : 'Guardar Integración'}</button>
                                 </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-8 flex space-x-3">
-                            <button 
-                                onClick={() => setSelectedProvider(null)}
-                                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                onClick={handleSave}
-                                disabled={loading}
-                                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
-                            >
-                                {loading && <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />}
-                                <span>Guardar Integración</span>
-                            </button>
-                        </div>
+                            </fieldset>
+                        </form>
                     </div>
                 </div>
             )}

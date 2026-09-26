@@ -178,4 +178,3 @@ export async function disconnectConnection(businessId: string, userId: string, i
     new_data: { provider: data[0].provider },
   });
 }
-
