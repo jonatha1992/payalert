@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+import { resolveScope } from '@/lib/server/scope';
+import {
+  assertStoreInBusiness,
+  getServiceClient,
+  getSessionProfile,
+  scopeErrorResponse,
+} from '@/lib/server/session';
 
 interface ReportFilters {
   businessId: string;
@@ -39,11 +40,20 @@ interface GroupedData {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
+
+    // El negocio y la tienda salen de la sesión; los parámetros del cliente son solo pistas.
+    const profile = await getSessionProfile(request);
+    const scope = resolveScope(profile, {
+      businessId: searchParams.get('businessId'),
+      storeId: searchParams.get('storeId'),
+    });
+    await assertStoreInBusiness(scope.storeId, scope.businessId);
+    const supabase = getServiceClient();
+
     // Parsear filtros
     const filters: ReportFilters = {
-      businessId: searchParams.get('businessId') || '',
-      storeId: searchParams.get('storeId') || undefined,
+      businessId: scope.businessId,
+      storeId: scope.storeId ?? undefined,
       startDate: searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       endDate: searchParams.get('endDate') || new Date().toISOString().split('T')[0],
       type: (searchParams.get('type') as 'income' | 'expense' | 'all') || 'all',
@@ -186,6 +196,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(report, { status: 200 });
 
   } catch (error) {
+    const denied = scopeErrorResponse(error);
+    if (denied) return denied;
     console.error('[Reports API] Error:', error);
     return NextResponse.json(
       { error: 'Error interno del servidor' },
