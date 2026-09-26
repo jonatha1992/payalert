@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getExpectedPayment, updateExpectedPayment } from '@/lib/server/expectedPayments';
 import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
+import { withRateLimit } from '@/lib/security/withRateLimit';
+import { apiRateLimiter } from '@/lib/security/rateLimiter';
 
 type Context = { params: Promise<{ id: string }> };
 
-// GET /api/expected-payments/:id - estado de un cobro (la terminal lo consulta mientras espera)
-export async function GET(request: NextRequest, context: Context) {
+async function getExpectedPaymentHandler(request: NextRequest, context: Context) {
   try {
     const scope = resolveScope(await getSessionProfile(request), {
       businessId: request.nextUrl.searchParams.get('businessId'),
@@ -21,8 +22,7 @@ export async function GET(request: NextRequest, context: Context) {
   }
 }
 
-// PATCH /api/expected-payments/:id  body { transactionId } - resolución manual (match auditado)
-export async function PATCH(request: NextRequest, context: Context) {
+async function updateExpectedPaymentHandler(request: NextRequest, context: Context) {
   try {
     const profile = await getSessionProfile(request);
     const scope = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
@@ -38,3 +38,6 @@ export async function PATCH(request: NextRequest, context: Context) {
     return NextResponse.json({ error: 'No pudimos actualizar el cobro.' }, { status: 500 });
   }
 }
+
+export const GET = withRateLimit(getExpectedPaymentHandler, { limiter: apiRateLimiter });
+export const PATCH = withRateLimit(updateExpectedPaymentHandler, { limiter: apiRateLimiter });

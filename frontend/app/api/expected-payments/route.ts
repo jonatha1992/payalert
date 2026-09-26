@@ -6,9 +6,10 @@ import {
 } from '@/lib/server/expectedPayments';
 import { resolveScope } from '@/lib/server/scope';
 import { assertStoreInBusiness, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
+import { withRateLimit } from '@/lib/security/withRateLimit';
+import { apiRateLimiter } from '@/lib/security/rateLimiter';
 
-// GET /api/expected-payments - cobros esperados del negocio o de la tienda del empleado
-export async function GET(request: NextRequest) {
+async function listExpectedPaymentsHandler(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
     const scope = resolveScope(await getSessionProfile(request), {
@@ -25,8 +26,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/expected-payments - crear un cobro esperado (opcionalmente con link de pago del proveedor)
-export async function POST(request: NextRequest) {
+async function createExpectedPaymentHandler(request: NextRequest) {
   try {
     const profile = await getSessionProfile(request);
     const body = (await request.json()) as CreateExpectedPaymentInput & { businessId?: string; storeId?: string };
@@ -41,3 +41,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No pudimos crear el cobro.' }, { status: 500 });
   }
 }
+
+export const GET = withRateLimit(listExpectedPaymentsHandler, { limiter: apiRateLimiter });
+export const POST = withRateLimit(createExpectedPaymentHandler, { limiter: apiRateLimiter });

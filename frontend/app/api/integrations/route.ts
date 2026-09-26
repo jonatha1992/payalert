@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createConnection, listConnections, type CreateConnectionInput } from '@/lib/server/connections';
 import { requireRole, resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
+import { withRateLimit } from '@/lib/security/withRateLimit';
+import { apiRateLimiter } from '@/lib/security/rateLimiter';
 
-// GET /api/integrations - integraciones del negocio (sin credenciales)
-export async function GET(request: NextRequest) {
+async function listIntegrationsHandler(request: NextRequest) {
   try {
     const profile = requireRole(await getSessionProfile(request), ['owner', 'admin']);
     const { businessId } = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
@@ -17,8 +18,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/integrations - conectar una cuenta (credenciales cifradas en el servidor)
-export async function POST(request: NextRequest) {
+async function createIntegrationHandler(request: NextRequest) {
   try {
     const profile = requireRole(await getSessionProfile(request), ['owner', 'admin']);
     const body = (await request.json()) as CreateConnectionInput & { businessId?: string };
@@ -32,3 +32,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No pudimos guardar la integración.' }, { status: 500 });
   }
 }
+
+export const GET = withRateLimit(listIntegrationsHandler, { limiter: apiRateLimiter });
+export const POST = withRateLimit(createIntegrationHandler, { limiter: apiRateLimiter });

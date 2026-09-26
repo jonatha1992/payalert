@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateExpectedPayment } from '@/lib/server/expectedPayments';
 import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
+import { withRateLimit } from '@/lib/security/withRateLimit';
+import { apiRateLimiter } from '@/lib/security/rateLimiter';
 
-// POST /api/expected-payments/:id/cancel
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function cancelExpectedPaymentHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const profile = await getSessionProfile(request);
     const scope = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
@@ -17,3 +18,5 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: 'No pudimos cancelar el cobro.' }, { status: 500 });
   }
 }
+
+export const POST = withRateLimit(cancelExpectedPaymentHandler, { limiter: apiRateLimiter });

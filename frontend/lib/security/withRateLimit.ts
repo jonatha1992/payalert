@@ -24,10 +24,10 @@ export function getClientIP(req: NextRequest): string {
 
 // Middleware de rate limiting para API routes
 export function withRateLimit(
-  handler: (req: NextRequest) => Promise<NextResponse>,
+  handler: (req: NextRequest, context?: any) => Promise<NextResponse>,
   options: RateLimitOptions
 ) {
-  return async (req: NextRequest): Promise<NextResponse> => {
+  return async (req: NextRequest, context?: any): Promise<NextResponse> => {
     const identifier = options.getIdentifier 
       ? options.getIdentifier(req)
       : getClientIP(req);
@@ -56,7 +56,7 @@ export function withRateLimit(
     }
 
     // Ejecutar handler
-    const response = await handler(req);
+    const response = await handler(req, context);
     
     // Agregar headers de rate limit a la respuesta
     response.headers.set('X-RateLimit-Limit', '100');
