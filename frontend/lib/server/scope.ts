@@ -19,6 +19,7 @@ export interface RequestedScope {
 }
 
 export interface ResolvedScope {
+  userId: string;
   businessId: string;
   storeId: string | null;
 }
@@ -48,7 +49,7 @@ export function resolveScope(profile: SessionProfile | null, requested: Requeste
   if (profile.role === 'admin') {
     const businessId = requestedBusiness ?? profile.businessId;
     if (!businessId) throw new ScopeError('businessId es requerido', 400);
-    return { businessId, storeId: requestedStore };
+    return { userId: profile.userId, businessId, storeId: requestedStore };
   }
 
   if (!profile.businessId) throw new ScopeError('Usuario sin negocio asignado', 403);
@@ -57,14 +58,14 @@ export function resolveScope(profile: SessionProfile | null, requested: Requeste
   }
 
   if (profile.role === 'owner') {
-    return { businessId: profile.businessId, storeId: requestedStore };
+    return { userId: profile.userId, businessId: profile.businessId, storeId: requestedStore };
   }
 
   if (!profile.assignedStoreId) throw new ScopeError('Empleado sin tienda asignada', 403);
   if (requestedStore && requestedStore !== profile.assignedStoreId) {
     throw new ScopeError('Acceso denegado a esta tienda', 403);
   }
-  return { businessId: profile.businessId, storeId: profile.assignedStoreId };
+  return { userId: profile.userId, businessId: profile.businessId, storeId: profile.assignedStoreId };
 }
 
 export function requireRole(profile: SessionProfile | null, roles: Role[]): SessionProfile {

@@ -22,7 +22,7 @@ describe('resolveScope', () => {
   });
 
   it('pins owners to their own business even when the client omits it', () => {
-    expect(resolveScope(owner, {})).toEqual({ businessId: 'bizA', storeId: null });
+    expect(resolveScope(owner, {})).toEqual({ userId: 'u1', businessId: 'bizA', storeId: null });
   });
 
   it('blocks an owner asking for another business (IDOR)', () => {
@@ -30,7 +30,7 @@ describe('resolveScope', () => {
   });
 
   it('forces employees onto their assigned store', () => {
-    expect(resolveScope(employee, { businessId: 'bizA' })).toEqual({ businessId: 'bizA', storeId: 'storeA1' });
+    expect(resolveScope(employee, { businessId: 'bizA' })).toEqual({ userId: 'u2', businessId: 'bizA', storeId: 'storeA1' });
   });
 
   it('blocks employees from other stores', () => {
@@ -42,7 +42,7 @@ describe('resolveScope', () => {
   });
 
   it('lets admins pick a business but requires one', () => {
-    expect(resolveScope(admin, { businessId: 'bizB', storeId: 's' })).toEqual({ businessId: 'bizB', storeId: 's' });
+    expect(resolveScope(admin, { businessId: 'bizB', storeId: 's' })).toEqual({ userId: 'u0', businessId: 'bizB', storeId: 's' });
     expectScopeError(() => resolveScope(admin, {}), 400);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, X, Store, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
@@ -8,23 +8,46 @@ import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
 import PushNotificationSettings from '@/components/PushNotificationSettings';
 
+interface NotificationPreferences {
+  pushEnabled: boolean;
+  soundEnabled: boolean;
+  emailEnabled: boolean;
+}
+
 export default function DashboardSettingsPage() {
     const { profile } = useAuth();
     const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
     const [businessName, setBusinessName] = useState('');
     const [loading, setLoading] = useState(false);
-    
-    // Notification Settings
-    const [notifications, setNotifications] = useState({
-        sound: true,
-        toast: true,
-        email: false
+    const [prefsLoading, setPrefsLoading] = useState(true);
+    const [prefs, setPrefs] = useState<NotificationPreferences>({
+        pushEnabled: true,
+        soundEnabled: true,
+        emailEnabled: false,
     });
+
+    const fetchPrefs = async () => {
+        if (!profile?.business_id) return;
+        try {
+            const response = await fetch(`/api/notification-preferences?businessId=${profile.business_id}`);
+            if (response.ok) {
+                const data = await response.json();
+                setPrefs(data.preferences);
+            }
+        } catch (error) {
+            console.error('Error fetching notification preferences:', error);
+        } finally {
+            setPrefsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPrefs();
+    }, [profile?.business_id]);
 
     const handleOpenEditBusiness = async () => {
         if (!profile?.business_id) return;
         setIsEditBusinessOpen(true);
-        // Fetch current name
         const { data } = await supabase.from('businesses').select('name').eq('id', profile.business_id).single();
         if (data) setBusinessName(data.name);
     };
@@ -49,12 +72,21 @@ export default function DashboardSettingsPage() {
         }
     };
 
-    const toggleNotification = (key: keyof typeof notifications) => {
-        setNotifications(prev => {
-            const newState = { ...prev, [key]: !prev[key] };
-            toast.info(`Notificación ${key} ${newState[key] ? 'activada' : 'desactivada'}`);
-            return newState;
-        });
+    const toggleNotification = async (key: keyof NotificationPreferences) => {
+        const newValue = !prefs[key];
+        setPrefs(prev => ({ ...prev, [key]: newValue }));
+        try {
+            await fetch(`/api/notification-preferences?businessId=${profile?.business_id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [key]: newValue }),
+            });
+            toast.info(`Notificación ${key} ${newValue ? 'activada' : 'desactivada'}`);
+        } catch (error) {
+            // Revert on error
+            setPrefs(prev => ({ ...prev, [key]: !newValue }));
+            toast.error('Error al guardar preferencia');
+        }
     };
 
     return (
@@ -89,24 +121,39 @@ export default function DashboardSettingsPage() {
                     <PushNotificationSettings />
                     
                     <div className="mt-6 space-y-4 max-w-md">
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alertas Visuales (Toast)</label>
-                            <button 
-                                onClick={() => toggleNotification('toast')}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${notifications.toast ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                            >
-                                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${notifications.toast ? 'translate-x-6' : ''}`} />
-                            </button>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sonido de Notificación</label>
-                             <button 
-                                onClick={() => toggleNotification('sound')}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${notifications.sound ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                            >
-                                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${notifications.sound ? 'translate-x-6' : ''}`} />
-                            </button>
-                        </div>
+                        {prefsLoading ? (
+                            <div className="text-center py-4 text-sm text-gray-500">Cargando preferencias...</div>
+                        ) : (
+                            <>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alertas Visuales (Toast)</label>
+                                    <button 
+                                        onClick={() => toggleNotification('pushEnabled')}
+                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.pushEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                    >
+                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.pushEnabled ? 'translate-x-6' : ''}`} />
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sonido de Notificación</label>
+                                    <button 
+                                        onClick={() => toggleNotification('soundEnabled')}
+                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.soundEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                    >
+                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.soundEnabled ? 'translate-x-6' : ''}`} />
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notificaciones por Email</label>
+                                    <button 
+                                        onClick={() => toggleNotification('emailEnabled')}
+                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.emailEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                    >
+                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.emailEnabled ? 'translate-x-6' : ''}`} />
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
