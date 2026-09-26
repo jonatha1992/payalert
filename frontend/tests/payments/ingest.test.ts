@@ -20,7 +20,7 @@ const transaction = (changes: Partial<NormalizedTransaction> = {}): NormalizedTr
 const expected = (id: string, changes: Partial<ExpectedPayment> = {}): ExpectedPayment => ({ id,
   businessId: b.businessId, storeId: b.storeId, amount: 100, currency: 'ARS', reference: null,
   status: 'WAITING', createdAt: '2026-01-01T11:59:00Z', expiresAt: '2026-01-01T12:30:00Z',
-  provider: 'mercado_pago', providerOrderId: null, checkoutUrl: null, ...changes });
+  provider: 'mercado_pago', providerOrderId: null, checkoutUrl: null, match_candidates: [], ...changes });
 
 function request(account = '2', changes: Partial<WebhookRequest> = {}): WebhookRequest {
   const ts = String(now() / 1000);

@@ -4,10 +4,21 @@ export interface MatchOptions {
   earlyToleranceMs?: number;
 }
 
+export interface MatchCandidate {
+  id: string;
+  score: number;
+  amount: number;
+  currency: string;
+  reference: string | null;
+  createdAt: string;
+  expiresAt: string;
+  provider: string | null;
+}
+
 export interface MatchResult {
   decision: MatchDecision;
   expectedPaymentId?: string;
-  candidates: { id: string; score: number }[];
+  candidates: MatchCandidate[];
 }
 
 export function scoreCandidate(
@@ -29,7 +40,16 @@ export function matchTransaction(
   tx: NormalizedTransaction, candidates: readonly ExpectedPayment[], opts: MatchOptions = {},
 ): MatchResult {
   const waiting = candidates.filter((candidate) => candidate.status === 'WAITING');
-  const scores = waiting.map((candidate) => ({ id: candidate.id, score: scoreCandidate(tx, candidate, opts) }))
+  const scores = waiting.map((candidate) => ({
+    id: candidate.id,
+    score: scoreCandidate(tx, candidate, opts),
+    amount: candidate.amount,
+    currency: candidate.currency,
+    reference: candidate.reference,
+    createdAt: candidate.createdAt,
+    expiresAt: candidate.expiresAt,
+    provider: candidate.provider,
+  }))
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
   const reference = waiting.find((candidate) => candidate.id === tx.externalReference);
   if (reference) return { decision: 'AUTO', expectedPaymentId: reference.id, candidates: scores };

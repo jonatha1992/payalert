@@ -7,7 +7,7 @@ const tx: NormalizedTransaction = { provider: 'mercado_pago', externalId: 'p', p
   payerName: null, payerIdentifier: null, description: null, externalReference: null, raw: {} };
 const expected: ExpectedPayment = { id: 'e', businessId: 'b', storeId: 's', amount: 100, currency: 'ARS',
   reference: null, status: 'WAITING', createdAt: '2026-01-01T12:01:00Z', expiresAt: '2026-01-01T12:30:00Z',
-  provider: 'mercado_pago', providerOrderId: null, checkoutUrl: null };
+  provider: 'mercado_pago', providerOrderId: null, checkoutUrl: null, match_candidates: [] };
 
 describe('matching', () => {
   it('adds the specified weights and includes both time boundaries', () => {
@@ -22,13 +22,21 @@ describe('matching', () => {
   });
 
   it.each([
-    [{}, 'AUTO', 110],
-    [{ provider: null, createdAt: '2026-01-02', expiresAt: '2026-01-03' }, 'SUGGESTED', 70],
-    [{ amount: 99 }, 'NO_MATCH', 50],
-  ] as const)('applies score thresholds %j', (changes, decision, score) => {
-    expect(matchTransaction(tx, [{ ...expected, ...changes }], {})).toEqual({ decision,
-      ...(decision === 'NO_MATCH' ? {} : { expectedPaymentId: 'e' }), candidates: [{ id: 'e', score }] });
-  });
+      [{}, 'AUTO', 110],
+      [{ provider: null, createdAt: '2026-01-02', expiresAt: '2026-01-03' }, 'SUGGESTED', 70],
+      [{ amount: 99 }, 'NO_MATCH', 50],
+    ] as const)('applies score thresholds %j', (changes, decision, score) => {
+      const baseExpected = { ...expected, ...changes };
+      const result = matchTransaction(tx, [baseExpected], {});
+      expect(result.decision).toBe(decision);
+      if (decision !== 'NO_MATCH') {
+        expect(result.expectedPaymentId).toBe('e');
+      }
+      expect(result.candidates).toHaveLength(1);
+      expect(result.candidates[0].score).toBe(score);
+      expect(result.candidates[0].amount).toBe(baseExpected.amount);
+      expect(result.candidates[0].currency).toBe(baseExpected.currency);
+    });
 
   it('requires manual review when more than one candidate scores at least 70', () => {
     expect(matchTransaction(tx, [expected, { ...expected, id: 'e2', provider: null }], {}).decision)

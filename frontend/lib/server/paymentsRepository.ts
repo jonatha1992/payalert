@@ -71,6 +71,7 @@ interface ExpectedRow {
   provider: Provider | null;
   provider_order_id: string | null;
   checkout_url: string | null;
+  match_candidates: { transaction_id: string }[] | null;
 }
 
 export function toExpectedPayment(row: ExpectedRow): ExpectedPayment {
@@ -87,6 +88,7 @@ export function toExpectedPayment(row: ExpectedRow): ExpectedPayment {
     provider: row.provider,
     providerOrderId: row.provider_order_id,
     checkoutUrl: row.checkout_url,
+    match_candidates: row.match_candidates ?? [],
   };
 }
 
@@ -218,49 +220,49 @@ export class SupabasePaymentsRepository implements PaymentsRepository {
   }
 
   async listOpenExpectedPayments(businessId: string, storeId?: string | null): Promise<ExpectedPayment[]> {
-    let query = this.db
-      .from('expected_payments')
-      .select('id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url')
-      .eq('business_id', businessId)
-      .eq('status', 'WAITING');
-    if (storeId) query = query.eq('store_id', storeId);
-    const { data, error } = await query.returns<ExpectedRow[]>();
-    if (error) throw error;
-    return (data ?? []).map(toExpectedPayment);
-  }
-
-  async markExpectedPayment(id: string, status: ExpectedPaymentStatus, transactionId: string): Promise<void> {
-    const { data: tx, error: txError } = await this.db
-      .from('transactions')
-      .select('id, business_id')
-      .eq('id', transactionId)
-      .single<{ id: string; business_id: string }>();
-    if (txError) throw txError;
-
-    const now = new Date().toISOString();
-    const patch =
-      status === 'MATCHED'
-        ? { status, matched_transaction_id: transactionId, matched_at: now }
-        : { status, match_candidates: [{ transaction_id: transactionId }] };
-
-    const { data, error } = await this.db
-      .from('expected_payments')
-      .update(patch)
-      .eq('id', id)
-      .eq('business_id', tx.business_id)
-      .eq('status', 'WAITING')
-      .select('id');
-    if (error) throw error;
-
-    if (status === 'MATCHED' && data && data.length > 0) {
-      const link = await this.db
-        .from('transactions')
-        .update({ expected_payment_id: id })
-        .eq('id', transactionId)
-        .eq('business_id', tx.business_id);
-      if (link.error) throw link.error;
+      let query = this.db
+        .from('expected_payments')
+        .select('id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url')
+        .eq('business_id', businessId)
+        .eq('status', 'WAITING');
+      if (storeId) query = query.eq('store_id', storeId);
+      const { data, error } = await query.returns<ExpectedRow[]>();
+      if (error) throw error;
+      return (data ?? []).map(toExpectedPayment);
     }
-  }
+
+    async markExpectedPayment(id: string, status: ExpectedPaymentStatus, transactionId: string): Promise<void> {
+      const { data: tx, error: txError } = await this.db
+        .from('transactions')
+        .select('id, business_id')
+        .eq('id', transactionId)
+        .single<{ id: string; business_id: string }>();
+      if (txError) throw txError;
+
+      const now = new Date().toISOString();
+      const patch =
+        status === 'MATCHED'
+          ? { status, matched_transaction_id: transactionId, matched_at: now }
+          : { status, match_candidates: [{ transaction_id: transactionId }] };
+
+      const { data, error } = await this.db
+        .from('expected_payments')
+        .update(patch)
+        .eq('id', id)
+        .eq('business_id', tx.business_id)
+        .eq('status', 'WAITING')
+        .select('id');
+      if (error) throw error;
+
+      if (status === 'MATCHED' && data && data.length > 0) {
+        const link = await this.db
+          .from('transactions')
+          .update({ expected_payment_id: id })
+          .eq('id', transactionId)
+          .eq('business_id', tx.business_id);
+        if (link.error) throw link.error;
+      }
+    }
 
   async logWebhook(entry: WebhookLogEntry): Promise<void> {
     const { error } = await this.db.from('webhook_logs').insert({

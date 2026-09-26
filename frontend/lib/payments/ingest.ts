@@ -146,22 +146,23 @@ export async function ingestWebhook({
     const changed = persisted.created || (persisted.previousStatus !== null && canTransitionStatus(persisted.previousStatus, tx.status));
     result = { httpStatus: 200, outcome: changed ? 'processed' : 'duplicate', transactionId: persisted.id };
     if (changed && tx.status === 'CONFIRMED') {
-      const candidates = await repo.listOpenExpectedPayments(connection.businessId, connection.storeId);
-      // Preserve the tenant/store boundary even if an adapter accidentally returns extra rows.
-      const scoped = candidates.filter((candidate) => candidate.businessId === connection.businessId
-        && (connection.storeId === null || candidate.storeId === connection.storeId));
-      result.match = matchTransaction(tx, scoped);
-      if (result.match.decision === 'AUTO' && result.match.expectedPaymentId) {
-        await repo.markExpectedPayment(result.match.expectedPaymentId, 'MATCHED', persisted.id);
-      } else if (result.match.decision === 'MANUAL_REVIEW') {
-        for (const candidate of result.match.candidates.filter((candidate) => candidate.score >= 70)) {
-          await repo.markExpectedPayment(candidate.id, 'MANUAL_REVIEW', persisted.id);
+          const candidates = await repo.listOpenExpectedPayments(connection.businessId, connection.storeId);
+          // Preserve the tenant/store boundary even if an adapter accidentally returns extra rows.
+          const scoped = candidates.filter((candidate) => candidate.businessId === connection.businessId
+            && (connection.storeId === null || candidate.storeId === connection.storeId));
+          result.match = matchTransaction(tx, scoped);
+          if (result.match.decision === 'AUTO' && result.match.expectedPaymentId) {
+            await repo.markExpectedPayment(result.match.expectedPaymentId, 'MATCHED', persisted.id);
+          } else if (result.match.decision === 'MANUAL_REVIEW' || result.match.decision === 'SUGGESTED') {
+            // Persist candidates for manual resolution (MANUAL_REVIEW) or suggested review (SUGGESTED)
+            for (const candidate of result.match.candidates.filter((candidate) => candidate.score >= 70)) {
+              await repo.markExpectedPayment(candidate.id, 'MANUAL_REVIEW', persisted.id);
+            }
+          }
+          result.notify = true;
+          result.notification = { amount: tx.amount, currency: tx.currency, occurredAt: tx.occurredAt,
+            storeId: connection.storeId, provider: tx.provider };
         }
-      }
-      result.notify = true;
-      result.notification = { amount: tx.amount, currency: tx.currency, occurredAt: tx.occurredAt,
-        storeId: connection.storeId, provider: tx.provider };
-    }
     if (changed) {
       await repo.audit({ action: 'payment_ingested', businessId: connection.businessId, connectionId: connection.id,
         transactionId: persisted.id, previousStatus: persisted.previousStatus, status: tx.status, occurredAt: receivedAt });
