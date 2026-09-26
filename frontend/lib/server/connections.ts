@@ -1,6 +1,9 @@
 // Server-only module: payment connections (integrations) for one business.
+import { MercadoPagoConnector } from '@/lib/payments/connectors/mercadopago';
+import { UalaConnector } from '@/lib/payments/connectors/uala';
+import { MockConnector } from '@/lib/payments/connectors/mock';
 import { encryptSecret } from '@/lib/payments/secretBox';
-import type { Provider } from '@/lib/payments/types';
+import type { PaymentConnection, Provider } from '@/lib/payments/types';
 import { ScopeError } from '@/lib/server/scope';
 import { getServiceClient } from '@/lib/server/session';
 
@@ -48,6 +51,19 @@ async function mercadoPagoAccountId(accessToken: string): Promise<string> {
   const me = (await response.json()) as { id?: number | string };
   if (me.id === undefined || me.id === null) throw new ScopeError('Mercado Pago no devolvió el id de la cuenta', 400);
   return String(me.id);
+}
+
+function getConnector(provider: Provider) {
+  switch (provider) {
+    case 'mercado_pago':
+      return new MercadoPagoConnector();
+    case 'uala':
+      return new UalaConnector();
+    case 'mock':
+      return new MockConnector();
+    default:
+      throw new ScopeError('Proveedor no soportado', 400);
+  }
 }
 
 export async function listConnections(businessId: string): Promise<ConnectionView[]> {
@@ -170,11 +186,80 @@ export async function disconnectConnection(businessId: string, userId: string, i
   if (!data || data.length === 0) throw new ScopeError('Integración no encontrada', 403);
 
   await db.from('audit_logs').insert({
-    business_id: businessId,
-    user_id: userId,
-    action: 'ACCOUNT_DISCONNECTED',
-    entity_type: 'payment_connection',
-    entity_id: id,
-    new_data: { provider: data[0].provider },
-  });
-}
+      business_id: businessId,
+      user_id: userId,
+      action: 'ACCOUNT_DISCONNECTED',
+      entity_type: 'payment_connection',
+      entity_id: id,
+      new_data: { provider: data[0].provider },
+    });
+  }
+
+  /**
+   * Verifica la salud de una conexión consultando al proveedor y actualiza
+   * last_sync_at / last_error / status en la base de datos.
+   * Devuelve { ok, detail }.
+   */
+  export async function checkConnectionHealth(
+    businessId: string,
+    connectionId: string
+  ): Promise<{ ok: boolean; detail?: string }> {
+    const db = getServiceClient();
+    const { data: connection, error } = await db
+      .from('payment_connections')
+      .select('id, provider, provider_account_id, status, credentials_encrypted, webhook_secret_encrypted')
+      .eq('id', connectionId)
+      .eq('business_id', businessId)
+      .maybeSingle<{
+        id: string;
+        provider: Provider;
+        provider_account_id: string | null;
+        status: string;
+        credentials_encrypted: string;
+        webhook_secret_encrypted: string | null;
+      }>();
+
+    if (error) throw error;
+    if (!connection) throw new ScopeError('Integración no encontrada', 403);
+
+    // No chequear si ya está desconectada
+    if (connection.status === 'DISCONNECTED') {
+      return { ok: false, detail: 'disconnected' };
+    }
+
+    const { decryptSecret } = await import('@/lib/payments/secretBox');
+    let credentials: Record<string, string>;
+    try {
+      credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as Record<string, string>;
+    } catch {
+      return { ok: false, detail: 'credenciales_invalidas' };
+    }
+
+    const connector = getConnector(connection.provider);
+    const result = await connector.healthCheck({
+          id: connection.id,
+          businessId,
+          storeId: null,
+          provider: connection.provider,
+          providerAccountId: connection.provider_account_id,
+          status: connection.status as any,
+          credentials,
+          webhookSecret: connection.webhook_secret_encrypted ? decryptSecret(connection.webhook_secret_encrypted) : null,
+        });
+
+        const now = new Date().toISOString();
+        const newStatus = result.ok ? 'CONNECTED' : 'ERROR';
+        const { error: updErr } = await db
+          .from('payment_connections')
+          .update({
+            status: newStatus,
+            last_sync_at: now,
+            last_error: result.ok ? null : (result as any).detail || 'health_check_failed',
+            updated_at: now,
+          })
+          .eq('id', connectionId)
+          .eq('business_id', businessId);
+    if (updErr) console.error('[health] update failed:', updErr.message);
+
+    return result;
+  }
