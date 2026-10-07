@@ -1,12 +1,23 @@
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
 
+if (process.env.NODE_ENV === 'production') {
+    console.error('❌ Refusing to run seed script in production environment.');
+    process.exit(1);
+}
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
     console.error('Missing Supabase URL or Key');
     console.log('Ensure .env.local exists with NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (optional but recommended for seeding)');
+    process.exit(1);
+}
+
+const defaultPassword = process.env.SEED_USER_PASSWORD;
+if (!defaultPassword) {
+    console.error('❌ Error: SEED_USER_PASSWORD environment variable must be specified.');
     process.exit(1);
 }
 
@@ -18,9 +29,9 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 const users = [
-    { email: 'owner@payalert.com', password: 'Password123!', role: 'owner', name: 'Test Owner' },
-    { email: 'employee@payalert.com', password: 'Password123!', role: 'employee', name: 'Test Employee' },
-    { email: 'admin@payalert.com', password: 'Password123!', role: 'admin', name: 'Test Admin' }
+    { email: process.env.SEED_OWNER_EMAIL || 'owner@payalert.local', password: defaultPassword, role: 'owner', name: 'Demo Owner' },
+    { email: process.env.SEED_EMPLOYEE_EMAIL || 'employee@payalert.local', password: defaultPassword, role: 'employee', name: 'Demo Employee' },
+    { email: process.env.SEED_ADMIN_EMAIL || 'admin@payalert.local', password: defaultPassword, role: 'admin', name: 'Demo Admin' }
 ];
 
 async function seed() {
@@ -35,7 +46,6 @@ async function seed() {
     
     if (busError) {
         console.error('Error creating business:', busError.message);
-        // Continue if business existence error, maybe fetch it?
     } else {
         console.log('Created Business:', business.id);
     }
@@ -74,14 +84,13 @@ async function seed() {
             console.log(`Auth User Created: ${userId}`);
 
             // 3. Create Public Profile
-            // Check if exists first
             const { data: existingProfile } = await supabase.from('users').select().eq('id', userId).single();
 
             if (!existingProfile) {
                 const { error: profileError } = await supabase.from('users').insert([{
                     id: userId,
                     email: u.email,
-                    role: u.role, // This might fail for Admin if Check Constraint not updated in DB
+                    role: u.role,
                     first_name: u.name.split(' ')[0],
                     last_name: u.name.split(' ')[1],
                     business_id: businessId
