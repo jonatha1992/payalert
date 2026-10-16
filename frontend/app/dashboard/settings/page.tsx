@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Settings, X, Store, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
 import PushNotificationSettings from '@/components/PushNotificationSettings';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 
 interface NotificationPreferences {
   pushEnabled: boolean;
@@ -19,31 +20,7 @@ export default function DashboardSettingsPage() {
     const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
     const [businessName, setBusinessName] = useState('');
     const [loading, setLoading] = useState(false);
-    const [prefsLoading, setPrefsLoading] = useState(true);
-    const [prefs, setPrefs] = useState<NotificationPreferences>({
-        pushEnabled: true,
-        soundEnabled: true,
-        emailEnabled: false,
-    });
-
-    const fetchPrefs = async () => {
-        if (!profile?.business_id) return;
-        try {
-            const response = await fetch(`/api/notification-preferences?businessId=${profile.business_id}`);
-            if (response.ok) {
-                const data = await response.json();
-                setPrefs(data.preferences);
-            }
-        } catch (error) {
-            console.error('Error fetching notification preferences:', error);
-        } finally {
-            setPrefsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchPrefs();
-    }, [profile?.business_id]);
+    const { preferences: prefs, loading: prefsLoading, update: updatePreference } = useNotificationPreferences(profile?.business_id);
 
     const handleOpenEditBusiness = async () => {
         if (!profile?.business_id) return;
@@ -73,18 +50,12 @@ export default function DashboardSettingsPage() {
     };
 
     const toggleNotification = async (key: keyof NotificationPreferences) => {
-        const newValue = !prefs[key];
-        setPrefs(prev => ({ ...prev, [key]: newValue }));
+        if (key === 'emailEnabled') return;
         try {
-            await fetch(`/api/notification-preferences?businessId=${profile?.business_id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ [key]: newValue }),
-            });
-            toast.info(`Notificación ${key} ${newValue ? 'activada' : 'desactivada'}`);
+            await updatePreference(key, !prefs[key]);
+            toast.info(`Notificación ${key} ${!prefs[key] ? 'activada' : 'desactivada'}`);
         } catch (error) {
-            // Revert on error
-            setPrefs(prev => ({ ...prev, [key]: !newValue }));
+            console.error('Error saving notification preference:', error);
             toast.error('Error al guardar preferencia');
         }
     };
@@ -144,12 +115,13 @@ export default function DashboardSettingsPage() {
                                     </button>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notificaciones por Email</label>
-                                    <button 
-                                        onClick={() => toggleNotification('emailEnabled')}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.emailEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                                    >
-                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.emailEnabled ? 'translate-x-6' : ''}`} />
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notificaciones por Email</label>
+                                        <p className="text-xs text-gray-500">Próximamente</p>
+                                    </div>
+                                    <button type="button" disabled aria-label="Notificaciones por Email, próximamente"
+                                        className="w-12 h-6 rounded-full bg-gray-200 dark:bg-gray-700 opacity-60 cursor-not-allowed">
+                                        <span className="block ml-1 w-4 h-4 rounded-full bg-white" />
                                     </button>
                                 </div>
                             </>

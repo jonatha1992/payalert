@@ -18,4 +18,17 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 **Impacto:** `005` conserva el índice existente al re-ejecutarse, aunque el primer alta aún exige cero duplicados; `006` ya recrea sus tres policies de manera repetible y no pide `uuid-ossp`. `DEPLOY_VERCEL.md` ya no contiene valores de VAPID con apariencia de claves reales ni recomienda secretos globales obsoletos de proveedores. No se aplicaron migraciones ni se llamaron servicios externos. Sigue pendiente validar SQL y migrador contra staging real.
 
-**Ticket/commit:** PAY-8 / commits locales `PAY-8 fix(migrations)` y `PAY-8 docs(staging)`.
+## 2026-10-15 — PAY-19: canal email pendiente de aprobación
+
+**Contexto:** Las preferencias de notificación son por usuario y negocio. El canal email aún no cuenta con un proveedor definido ni aprobación de costos.
+
+**Decisión:** Mantener el canal email deshabilitado y no implementar envíos hasta que el dueño elija/apruebe proveedor y costo. Revisar privacidad de cajero y registrar solo estado/causa de entrega, nunca datos financieros innecesarios.
+
+**Alternativas descartadas:** Activar el canal con un proveedor o costo asumido sin aprobación.
+
+**Motivo:** Evitar gasto no autorizado y exposición innecesaria de datos personales/financieros.
+
+**Impacto:** El toggle email se presenta como próximamente; la implementación de email queda pendiente de decisión explícita del dueño.
+
+**Ticket/commit:** PAY-19.
+

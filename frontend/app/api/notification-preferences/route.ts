@@ -25,6 +25,11 @@ async function updatePreferencesHandler(request: NextRequest) {
     const profile = await getSessionProfile(request);
     const scope = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
     const body = (await request.json()) as Partial<{ pushEnabled: boolean; soundEnabled: boolean; emailEnabled: boolean }>;
+    if (!Object.keys(body).length || Object.entries(body).some(([key, value]) =>
+      !['pushEnabled', 'soundEnabled', 'emailEnabled'].includes(key) || typeof value !== 'boolean'
+    )) {
+      return NextResponse.json({ error: 'Preferencias inválidas.' }, { status: 400 });
+    }
     const prefs = await updateNotificationPreferences(scope, body);
     return NextResponse.json({ preferences: prefs });
   } catch (error) {

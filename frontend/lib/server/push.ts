@@ -72,8 +72,15 @@ export async function sendPushToBusiness(
         return true;
       } catch (err) {
         const statusCode = (err as { statusCode?: number }).statusCode;
+        console.error('[Push Delivery] Failed:', {
+          statusCode: typeof statusCode === 'number' ? statusCode : undefined,
+          subscription: 'redacted',
+        });
         if (statusCode === 404 || statusCode === 410) {
-          await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          const { error: deleteError } = await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          if (deleteError) {
+            console.error('[Push Delivery] Expired subscription cleanup failed:', deleteError.message);
+          }
         }
         return false;
       }
