@@ -2,7 +2,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
-import { ScopeError, type Role, type SessionProfile } from '@/lib/server/scope';
+import { ScopeError, type SessionProfile } from '@/lib/server/scope';
+import { requireKnownRole } from '@/lib/server/rbac';
 
 let serviceClient: SupabaseClient | null = null;
 
@@ -45,7 +46,7 @@ export async function getSessionProfile(request: NextRequest): Promise<SessionPr
 
   return {
     userId: row.id as string,
-    role: row.role as Role,
+    role: requireKnownRole(row.role),
     businessId: (row.business_id as string | null) ?? null,
     assignedStoreId: (row.assigned_store_id as string | null) ?? null,
   };

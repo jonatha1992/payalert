@@ -7,6 +7,7 @@ import type { PaymentConnection, Provider } from '@/lib/payments/types';
 import { healthStatusForResult, safeHealthDetail } from '@/lib/payments/connectionHealth';
 import { ScopeError } from '@/lib/server/scope';
 import { getServiceClient } from '@/lib/server/session';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 /** Public view of a connection. Never includes credentials or secrets. */
 export interface ConnectionView {
@@ -155,14 +156,7 @@ export async function createConnection(
     throw error;
   }
 
-  await db.from('audit_logs').insert({
-    business_id: businessId,
-    user_id: userId,
-    action: 'ACCOUNT_CONNECTED',
-    entity_type: 'payment_connection',
-    entity_id: data.id,
-    new_data: { provider: input.provider, store_id: input.storeId || null },
-  });
+  await recordAuditEvent(db, { businessId, actorId: userId, action: 'CONFIGURATION_UPDATED', entityType: 'payment_connection', entityId: data.id });
 
   const views = await listConnections(businessId);
   const created = views.find((view) => view.id === data.id);
@@ -186,14 +180,7 @@ export async function disconnectConnection(businessId: string, userId: string, i
   if (error) throw error;
   if (!data || data.length === 0) throw new ScopeError('Integración no encontrada', 403);
 
-  await db.from('audit_logs').insert({
-      business_id: businessId,
-      user_id: userId,
-      action: 'ACCOUNT_DISCONNECTED',
-      entity_type: 'payment_connection',
-      entity_id: id,
-      new_data: { provider: data[0].provider },
-    });
+  await recordAuditEvent(db, { businessId, actorId: userId, action: 'CONFIGURATION_UPDATED', entityType: 'payment_connection', entityId: id });
   }
 
   /**

@@ -4,6 +4,7 @@ import {
   listExpectedPayments,
   type CreateExpectedPaymentInput,
 } from '@/lib/server/expectedPayments';
+import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
 import { assertStoreInBusiness, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { withRateLimit } from '@/lib/security/withRateLimit';
@@ -12,7 +13,8 @@ import { apiRateLimiter } from '@/lib/security/rateLimiter';
 async function listExpectedPaymentsHandler(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
-    const scope = resolveScope(await getSessionProfile(request), {
+    const profile = requirePermission(await getSessionProfile(request), 'charge', 'read');
+    const scope = resolveScope(profile, {
       businessId: params.get('businessId'),
       storeId: params.get('storeId'),
     });
@@ -28,11 +30,11 @@ async function listExpectedPaymentsHandler(request: NextRequest) {
 
 async function createExpectedPaymentHandler(request: NextRequest) {
   try {
-    const profile = await getSessionProfile(request);
+    const profile = requirePermission(await getSessionProfile(request), 'charge', 'create');
     const body = (await request.json()) as CreateExpectedPaymentInput & { businessId?: string; storeId?: string };
     const scope = resolveScope(profile, { businessId: body.businessId, storeId: body.storeId });
     await assertStoreInBusiness(scope.storeId, scope.businessId);
-    const created = await createExpectedPayment(scope, profile!.userId, body, { origin: request.nextUrl.origin });
+    const created = await createExpectedPayment(scope, profile.userId, body, { origin: request.nextUrl.origin });
     return NextResponse.json({ expectedPayment: created }, { status: 201 });
   } catch (error) {
     const denied = scopeErrorResponse(error);

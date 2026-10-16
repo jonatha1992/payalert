@@ -4,6 +4,7 @@ import type { ExpectedPayment, Provider } from '@/lib/payments/types';
 import { toConnection, toExpectedPayment, CONNECTION_COLUMNS, type ConnectionRow } from '@/lib/server/paymentsRepository';
 import { ScopeError, type ResolvedScope } from '@/lib/server/scope';
 import { getServiceClient } from '@/lib/server/session';
+import { recordAuditEvent } from '@/lib/server/audit';
 
 const COLUMNS =
   'id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url, matched_transaction_id, match_score, matched_at';
@@ -113,14 +114,7 @@ export async function createExpectedPayment(
     .single<Row>();
   if (error) throw error;
 
-  await db.from('audit_logs').insert({
-    business_id: scope.businessId,
-    user_id: userId,
-    action: 'EXPECTED_PAYMENT_CREATED',
-    entity_type: 'expected_payment',
-    entity_id: created.id,
-    new_data: { amount: created.amount, store_id: created.store_id, provider: created.provider },
-  });
+  await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'CONFIGURATION_UPDATED', entityType: 'expected_payment', entityId: created.id });
 
   if (connectionRow) {
     const connector = getConnector(connectionRow.provider);
@@ -177,11 +171,12 @@ export async function updateExpectedPayment(
     }
     const { data: tx } = await db
       .from('transactions')
-      .select('id, provider_status, expected_payment_id')
+      .select('id, provider_status, expected_payment_id, store_id')
       .eq('id', action.transactionId)
       .eq('business_id', scope.businessId)
-      .maybeSingle<{ id: string; provider_status: string | null; expected_payment_id: string | null }>();
+      .maybeSingle<{ id: string; provider_status: string | null; expected_payment_id: string | null; store_id: string | null }>();
     if (!tx) throw new ScopeError('Movimiento no encontrado', 403);
+    if (scope.storeId && tx.store_id !== scope.storeId) throw new ScopeError('Acceso denegado a esta tienda', 403);
     if (tx.provider_status !== 'CONFIRMED') throw new ScopeError('El movimiento no está acreditado', 400);
     if (tx.expected_payment_id && tx.expected_payment_id !== id) {
       throw new ScopeError('Ese movimiento ya está asignado a otro cobro', 400);
@@ -206,13 +201,6 @@ export async function updateExpectedPayment(
       .contains('match_candidates', [{ transaction_id: tx.id }]);
   }
 
-  await db.from('audit_logs').insert({
-    business_id: scope.businessId,
-    user_id: userId,
-    action: action.type === 'cancel' ? 'EXPECTED_PAYMENT_CANCELLED' : 'EXPECTED_PAYMENT_MANUAL_MATCH',
-    entity_type: 'expected_payment',
-    entity_id: id,
-    new_data: action.type === 'match' ? { transaction_id: action.transactionId } : null,
-  });
+  await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'MANUAL_RESOLUTION', entityType: 'expected_payment', entityId: id });
   return getExpectedPayment(scope, id);
 }

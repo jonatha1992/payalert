@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getConnector } from '@/lib/payments/connectors';
 import type { MockConnector } from '@/lib/payments/connectors/mock';
 import type { MovementStatus } from '@/lib/payments/types';
-import { requireRole, resolveScope } from '@/lib/server/scope';
+import { requirePermission } from '@/lib/server/rbac';
+import { resolveScope } from '@/lib/server/scope';
 import { getServiceClient, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { processWebhook } from '@/lib/server/webhookHandler';
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
   try {
-    const profile = requireRole(await getSessionProfile(request), ['owner', 'admin']);
+    const profile = requirePermission(await getSessionProfile(request), 'movement', 'create');
     const body = (await request.json()) as {
       businessId?: string;
       amount?: number;

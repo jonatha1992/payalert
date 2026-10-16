@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server/rbac';
 import { getServiceClient, getSessionProfile } from '@/lib/server/session';
 
 // POST /api/push/unsubscribe - Eliminar suscripción de push
 export async function POST(request: NextRequest) {
   try {
-    const profile = await getSessionProfile(request);
-    if (!profile) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
+    const profile = requirePermission(await getSessionProfile(request), 'push', 'delete');
     const { endpoint } = await request.json();
     const supabase = getServiceClient();
 

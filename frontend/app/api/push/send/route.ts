@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, resolveScope } from '@/lib/server/scope';
+import { requirePermission } from '@/lib/server/rbac';
+import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { sendPushToBusiness, type PushNotificationPayload } from '@/lib/server/push';
 
 // POST /api/push/send - Enviar notificación push (solo dueños/admin, dentro de su negocio)
 export async function POST(request: NextRequest) {
   try {
-    const profile = requireRole(await getSessionProfile(request), ['owner', 'admin']);
+    const profile = requirePermission(await getSessionProfile(request), 'push', 'create');
     const {
       userId,
       businessId,

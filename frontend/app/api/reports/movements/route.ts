@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
 import { assertStoreInBusiness, getServiceClient, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { parseReportQuery } from '@/lib/reports/query';
@@ -8,7 +9,7 @@ const COLUMNS = 'id, type, amount, description, category, store_id, created_at, 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const profile = await getSessionProfile(request);
+    const profile = requirePermission(await getSessionProfile(request), 'movement', 'read');
     const scope = resolveScope(profile, {
       businessId: searchParams.get('businessId'),
       storeId: searchParams.get('storeId'),

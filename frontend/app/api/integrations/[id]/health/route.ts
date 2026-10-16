@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkConnectionHealth } from '@/lib/server/connections';
-import { requireRole, resolveScope } from '@/lib/server/scope';
+import { requirePermission } from '@/lib/server/rbac';
+import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 
 // GET /api/integrations/[id]/health - Verificar salud de una conexión
@@ -9,7 +10,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const profile = requireRole(await getSessionProfile(request), ['owner', 'admin']);
+    const profile = requirePermission(await getSessionProfile(request), 'connection', 'read');
     const { businessId } = resolveScope(profile, {
       businessId: request.nextUrl.searchParams.get('businessId'),
     });

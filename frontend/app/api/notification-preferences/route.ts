@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getNotificationPreferences, updateNotificationPreferences } from '@/lib/server/notificationPreferences';
+import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { withRateLimit } from '@/lib/security/withRateLimit';
@@ -7,9 +8,9 @@ import { apiRateLimiter } from '@/lib/security/rateLimiter';
 
 async function getPreferencesHandler(request: NextRequest) {
   try {
-    const scope = resolveScope(await getSessionProfile(request), {
-      businessId: request.nextUrl.searchParams.get('businessId'),
-    });
+    const profile = await getSessionProfile(request);
+    requirePermission(profile, 'session', 'read');
+    const scope = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
     const prefs = await getNotificationPreferences(scope);
     return NextResponse.json({ preferences: prefs });
   } catch (error) {
@@ -23,6 +24,7 @@ async function getPreferencesHandler(request: NextRequest) {
 async function updatePreferencesHandler(request: NextRequest) {
   try {
     const profile = await getSessionProfile(request);
+    requirePermission(profile, 'session', 'read');
     const scope = resolveScope(profile, { businessId: request.nextUrl.searchParams.get('businessId') });
     const body = (await request.json()) as Partial<{ pushEnabled: boolean; soundEnabled: boolean; emailEnabled: boolean }>;
     if (!Object.keys(body).length || Object.entries(body).some(([key, value]) =>

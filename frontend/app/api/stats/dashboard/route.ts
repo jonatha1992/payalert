@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
 import {
   assertStoreInBusiness,
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
 
     // El negocio y la tienda salen de la sesión; los parámetros del cliente son solo pistas.
-    const profile = await getSessionProfile(request);
+    const profile = requirePermission(await getSessionProfile(request), 'report', 'read');
     const { businessId, storeId } = resolveScope(profile, {
       businessId: searchParams.get('businessId'),
       storeId: searchParams.get('storeId'),
