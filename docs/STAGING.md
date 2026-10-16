@@ -79,6 +79,50 @@ Seguir `docs/DEPLOY_VERCEL.md` para Project → Settings → Environment Variabl
 - [ ] Verificar conexiones por negocio/proveedor, estado y disponibilidad del descifrado en la app, sin imprimir secretos. Comparar con tokens activos y resolver faltantes/duplicados.
 - [ ] Solo después del cotejo y aprobación adicional: evaluar retirar `payment_tokens`; por defecto queda preservada como rollback.
 
+### Plan de migración, comparación y reconexión PAY-7
+
+Este runbook no autoriza acceso a una base de datos. No ejecutar contra producción ni staging sin aprobación explícita de Jonatan. El dry-run sí lee las filas activas de `payment_tokens` y requiere credenciales de staging aprobadas.
+
+#### Antes de ejecutar
+
+1. Tomar export/snapshot recuperable y de acceso controlado de `public.payment_tokens`. Registrar referencia del backup y conteos sin exportar `token_value` a logs/tickets. Mantener la tabla y sus restricciones RLS durante toda la validación; el migrador no elimina ni modifica la tabla legacy.
+2. Confirmar URL del proyecto staging aprobado y que `PAYMENTS_ENCRYPTION_KEY` sea la clave de ese entorno. Usar un gestor confiable de secretos; no poner claves en historial de comandos.
+3. Confirmar que `005_payments_hardening.sql` ya creó `payment_connections` y que `payment_tokens` sigue presente.
+
+#### Dry-run y migración
+
+From the repository root, run `node scripts/migrate-payment-tokens.mjs --dry-run` only after explicit staging approval. It requires `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `PAYMENTS_ENCRYPTION_KEY` (32-byte base64), and reads active tokens / existing connections without writing to `payment_connections` or `audit_logs`. It reports only aggregate migrated/skipped/error counts and skip reasons; it does not print credential or token values. Review omissions: unsupported provider, incomplete MP access token, Ualá reconnection required, account conflict, and an already-migrated connection.
+
+Desde la raíz del repositorio, ejecutar `node scripts/migrate-payment-tokens.mjs` contra staging solo después de revisar el informe, backup e identidad del proyecto, y obtener aprobación separada. No ejecutarlo en CI/tests. Usa el mismo sobre AES-256-GCM que `frontend/lib/payments/secretBox.ts` (`enc:v1:<iv b64>:<tag b64>:<ciphertext b64>`), conserva negocio/tienda/proveedor y omite conexiones migradas para no sobrescribir credenciales conectadas. Los errores se cuentan sin imprimir valores; detenerse e investigar antes de reintentar.
+
+#### Comparación agregada antes/después
+
+Tomar estos conteos antes y repetirlos después (no seleccionar/exportar `token_value` a logs):
+
+```sql
+SELECT provider, count(*) AS active_tokens,
+       count(DISTINCT business_id) AS businesses,
+       count(*) FILTER (WHERE store_id IS NOT NULL) AS store_scoped
+FROM public.payment_tokens WHERE is_active = true GROUP BY provider ORDER BY provider;
+
+SELECT provider, count(*) AS connected_rows,
+       count(DISTINCT business_id) AS businesses,
+       count(*) FILTER (WHERE store_id IS NOT NULL) AS store_scoped,
+       count(*) FILTER (WHERE credentials_encrypted LIKE 'enc:v1:%') AS encrypted_rows
+FROM public.payment_connections WHERE status = 'CONNECTED' GROUP BY provider ORDER BY provider;
+```
+
+Conciliar por proveedor y alcance negocio/tienda, considerando motivos/conteos del migrador, conexiones previas, conflictos de cuenta y tokens que requieren reconexión. Una persona autorizada debe verificar que la app descifra las credenciales sin imprimir secretos. No leer credenciales para comparar ni adjuntar identificadores de datos privados en tickets. Preservar backup y tabla legacy hasta firmar la conciliación.
+
+#### Reconexión y gates de cierre
+
+- Ualá sin `client_secret_id` se omite y requiere reconexión por Integraciones autenticado; el `token_value` legacy es una contraseña y deliberadamente no se migra como secreto v2.
+- Mercado Pago sin `token_value` no vacío se omite. Resolver manualmente IDs de cuenta ausentes/conflictivos; nunca asociar automáticamente una cuenta a otro negocio.
+- Completar reconexión sandbox/stage y pruebas de health-check por secciones 5–6. Verificar tenant/negocio/tienda y que APIs del navegador no revelen credenciales.
+- Mantener `payment_tokens` y su RLS restrictiva. Retirarla exige aprobación aparte después de backup, conciliación de conteos, descifrado, reconexión y aprobación de smoke tests. No descomentar ni ejecutar el `DROP TABLE` de migración 005 como parte de PAY-7.
+
+---
+
 ## 5. Registrar webhooks
 
 - [ ] Desplegar Preview/branch `dev` a URL exclusiva de staging y confirmar URL HTTPS.
