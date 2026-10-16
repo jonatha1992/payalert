@@ -1,0 +1,53 @@
+# 00 — Descripción global
+
+## Propósito y problema
+
+PayAlert es una aplicación web para que un negocio consulte movimientos y controle en caja los pagos que notifican sus cuentas de cobro conectadas. Busca reducir la demora e incertidumbre entre recibir un pago en el proveedor y verlo en el flujo de trabajo del comercio. La implementación observada es Next.js App Router sobre Supabase, con PWA, APIs de servidor y conectores de Mercado Pago/Ualá; no se afirma cobertura universal de transferencias bancarias. La evolución “PayWatch” es una alternativa de arquitectura bajo decisión, no un producto ya reescrito (véase `docs/adr/ADR-001-payalert-vs-paywatch.md`).
+
+## Objetivo del análisis
+
+Describir el comportamiento funcional comprobable del código y las fuentes presentes, separar capacidades implementadas de las no verificadas y registrar decisiones de producto pendientes. Los perfiles, permisos, reglas y estados se definen una sola vez en [01](01-actores-y-roles.md), [03](03-reglas-de-negocio.md) y la trazabilidad [06](06-trazabilidad.md); aquí solo se los referencia.
+
+## Alcance
+
+- **Dentro:** sesión de usuario, conexiones Mercado Pago/Ualá disponibles en el código, salud de conexión, recepción/procesamiento asíncrono de webhooks, consulta de transacción al proveedor, persistencia idempotente, cobro esperado, matching, revisión, movimientos/reportes/CSV, preferencias de notificación y auditoría descritos en [02](02-requerimientos.md) y [PN1–PN6](README.md).
+- **Fuera/no comprometido:** capacidades enumeradas en [05](05-limites-del-sistema.md), entre ellas aplicación móvil nativa, API pública, email, proveedores no implementados y transferencia entrante general. La presencia de una tabla o de un ticket no constituye una funcionalidad de producto habilitada.
+
+## Glosario
+
+| Término | Definición |
+|---|---|
+| Cuenta de cobro / conexión | Cuenta de proveedor asociada a un negocio (y opcionalmente sucursal), representada por una conexión servidor-side. |
+| Movimiento | Transacción normalizada obtenida desde la API autoritativa del proveedor, distinta del evento entrante del webhook. |
+| Cobro esperado | Importe/referencia creado en caja, opcionalmente asociado a una orden/link del proveedor. |
+| Matching | Evaluación de compatibilidad entre un movimiento y cobros en espera, especificada en RN-06. |
+| Webhook | Notificación entrante que aporta una pista para recuperar un recurso desde el proveedor; no es fuente autoritativa del importe/estado. |
+| Tenant / negocio | Límite de aislamiento representado en las filas por `business_id`; usuarios actuales tienen un solo `business_id`. |
+| RLS | Row Level Security de PostgreSQL/Supabase. |
+| ACK / worker / dead letter | Confirmación HTTP de recepción, procesamiento diferido por worker y estado final de evento con error irrecuperable. |
+| [Inferido] PayWatch | Nombre de una posible evolución/replatform, no alcance aprobado. |
+
+## Mapa de documentos: fuentes, duplicados y consolidación propuesta
+
+No editar ni borrar los documentos listados en esta tabla como parte del análisis. La consolidación es una propuesta; cada tema tiene una fuente preferida para mantenimiento y las copias contradictorias se deben corregir solo en un trabajo aprobado.
+
+| Tema | Fuente preferida | Redundantes/desactualizados y evidencia concreta | Propuesta (no ejecutada) |
+|---|---|---|---|
+| Comportamiento y arquitectura desplegable | Código actual `frontend/app`, `frontend/lib`, `frontend/proxy.ts`; para intención, `docs/adr/ADR-001-payalert-vs-paywatch.md` | `docs/Arquitectura.md` §§ APIs usa `api/webhooks/mercado-pago` (archivo: `frontend/app/api/webhooks/mercadopago/route.ts`), valida firma Ualá (el conector Ualá valida UUID/consulta; no firma según `docs/providers/uala.md`), dibuja `payments` Realtime aunque pipeline actual persiste `transactions`, y contiene ejemplos Pages API/Zustand/Middleware que no describen rutas actuales. | Mantener Arquitectura como descripción técnica concisa y eliminar ejemplos no implementados en una consolidación autorizada. |
+| Modelo físico vigente | Migraciones ordenadas `docs/migrations/*.sql` + `docs/database_schema.sql` como snapshot solo si se confirma su fecha | `docs/database_schema.sql` presenta núcleo legacy `payments`/`payment_tokens`; 005 añade `payment_connections` y `expected_payments`, 006 preferencias, 007 auditoría, 008 evidencia de matching, 009 estados OAuth y 010 cola. No se afirma solapamiento entre 005/008: 005 crea cobros esperados y 008 añade evidencia posterior. Snapshot y cadena evolucionada no son intercambiables como schema final. | Declarar una migración canónica reproducible y regenerar snapshot después de validar staging. |
+| API pública/privada real | `frontend/app/api/**/route.ts` | `docs/API_Documentation.md` anuncia endpoints `/api/businesses`, `/api/payments`, `/api/transactions`, `/api/config/business`, `/api/auth/*`, API v1 y JWT Bearer, pero esas rutas no aparecen en App Router actual; endpoints reales incluyen `/api/expected-payments`, `/api/integrations`, `/api/reports`, `/api/stats/dashboard`, webhooks y worker. Además documenta límites distintos a los configurados en `frontend/lib/security/rateLimiter.ts` y cabeceras de `withRateLimit.ts`. | Reemplazar la referencia por catálogo derivado de rutas existentes y distinguir cookie/Supabase Auth de webhook. |
+| Interacción de usuario | `frontend/app/**` + sus componentes | `docs/Manual_de_Usuario.md` describe crear/eliminar negocios, invitaciones, Excel/PDF, emails automáticos, horarios de silencio, inventario y actividad de cuenta; no hay evidencia de esas pantallas/acciones en el código inspeccionado. Manual habla de configurar tokens manuales, mientras existe OAuth MP y los conectores actuales usan conexión cifrada. | Marcar secciones obsoletas y volver a redactar solo con recorrido de UI verificado. |
+| Requisitos de producto | `docs/Ingeniería de Requerimientos.md` solo como base breve + tickets y decisiones aprobadas | Documento tiene RF1–RF3 y un RNF de seguridad, no especifica matching, cola, OAuth ni canales completos. Los tickets citan PRD 8/15/18/23/27/35/43 y otros no disponibles; no inventar su contenido. | Mantener este paquete como análisis de evidencia y enlazar PRD real cuando se entregue. |
+| Despliegue | `docs/STAGING.md`, `docs/Guia_de_Despliegue.md` y archivo `docs/DEPLOY_VERCEL.md` solo después de revisión | `DEPLOY_VERCEL.md` sugiere `MP_WEBHOOK_SECRET`, `X-Uala-Signature`, webhook IPN mockeable vía curl y endpoint `/api/webhooks/mercado-pago`; docs/provider + conectores indican firma/consulta MP, Ualá v2 sin firma, endpoint actual `mercadopago`, y curl no sustituye firma. También lista cuotas de planes como hecho. | Tratar guía como no normativa; armonizar una vez que operador confirme el despliegue real. |
+| Proveedores y OAuth | `docs/providers/mercadopago.md`, `docs/providers/uala.md`, `docs/OAUTH_MERCADOPAGO.md` y conectores de código | `docs/Guia_de_Desarrollo.md`/`docs/Tech.md` y documentos antiguos hablan de tokens/env globales, IPN genérico y soporte de proveedor más amplio sin alinear los contratos actuales. Ualá no tiene webhook secret; la guía anterior de API dice que sí. | Mantener documentos específicos por proveedor y corregir el vocabulario solo tras validar versiones oficiales y staging. |
+| RBAC, auditoría y membresías | `frontend/lib/server/rbac.ts`, `scope.ts`, migraciones 007–008, ADR-002 | `docs/Arquitectura.md`, `docs/Manual_de_Usuario.md` e Ingeniería simplifican roles a owner/employee. Código mapea legacy admin→manager, employee→cashier y define support; `users.business_id` permanece singular y no existe memberships en el esquema/migración observados, aunque ADR-002 analiza la propuesta. | Consolidar la descripción de autorización alrededor de matriz RBAC y conservar multiempresa como decisión no aprobada. |
+| Planes/comercial | `docs/PLANES_SAAS.md` como propuesta no aprobada | Documento explicita que Basic/Comercio/Pro son propuestos y sin precio validado; API docs/otros textos presentan planes/limites de hosting sin evidencia actual del producto contratado. | No presentar tiers, precios, cuotas ni facturación como compromiso. |
+| Reportes actuales | Rutas `frontend/app/api/reports/**` | `API_Documentation.md` y `analitica-brechas.md` refieren rutas ausentes o salidas más amplias; la ruta actual ofrece CSV y filtros acotados. | Usar inventario de rutas como fuente; requisitos dependientes de PRD quedan pendientes. |
+| Planificación y stack | `docs/PLANIFICACION_DESARROLLO.md`, `docs/Tech.md`, `docs/Guia_de_Desarrollo.md` | Son planes/guías con tareas y tecnologías propuestas; ADR-001 aclara que Redis/Celery/FastAPI/Vue no están implementados como plataforma actual. | Etiquetar plan vs hecho en futuras actualizaciones sin convertir estimaciones en promesas. |
+| README de repo y decisiones | `docs/README.md`, `docs/DECISIONS.md`, `docs/adr/ADR-001-payalert-vs-paywatch.md`, `docs/adr/ADR-002-multiempresa-memberships.md` | README y fuentes citadas contienen visión superpuesta; los ADR presentan problemas y opciones, no decisiones de producto finales. | Mantener índice en una sola fuente; no modificar en este paquete. |
+
+## Consistencia del paquete
+
+Los actores se definen en [01](01-actores-y-roles.md), las reglas en [03](03-reglas-de-negocio.md), y el estado de cada RF/RNF únicamente en [06](06-trazabilidad.md). Este documento referencia esos IDs; no los replica. La situación planificada/implementada y sus evidencias se reúnen en [07](07-redundancias-y-viabilidad.md).
+
+Fuentes primarias revisadas: `docs/README.md`, `docs/Arquitectura.md`, `docs/Modelos_de_Datos.md`, `docs/Manual_de_Usuario.md`, `docs/Ingeniería de Requerimientos.md`, `docs/PLANIFICACION_DESARROLLO.md`, `docs/Tech.md`, `docs/API_Documentation.md`, `docs/Guia_de_Desarrollo.md`, `docs/Guia_de_Despliegue.md`, `docs/DECISIONS.md`, `docs/STAGING.md`, `docs/DEPLOY_VERCEL.md`, `docs/PLANES_SAAS.md`, `docs/OAUTH_MERCADOPAGO.md`, `docs/analitica-brechas.md`, ADRs 001–002, guías por proveedor, `docs/database_schema.sql`, migraciones 001–010 y código bajo `frontend/app`, `frontend/lib`, `frontend/proxy.ts`, `scripts/`. Los PRD numerados que no están en repo se consignan como pendientes en [99](99-pendientes.md). Jira informa estados/comentarios de tickets, que no se consideran prueba de despliegue ni aceptación de staging.
