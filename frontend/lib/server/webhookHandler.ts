@@ -59,9 +59,7 @@ export async function processWebhook(
 
 export async function handleProviderWebhook(provider: Provider, request: NextRequest): Promise<NextResponse> {
   const rawBody = await request.text();
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ received: false }, { status: 413 });
-  }
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) return NextResponse.json({ received: false }, { status: 413 });
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
   const query: Record<string, string> = {};

@@ -2,9 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type QueueStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'DEAD';
 export interface WebhookEvent { id: string; provider: string; connection_id: string; dedupe_key: string; payload: unknown }
+export type WebhookEventInput = Omit<WebhookEvent, 'id'> & { id?: string }
 export interface QueueRow extends WebhookEvent { status: QueueStatus; attempts: number; next_attempt_at: string; locked_at: string | null; created_at: string; last_error_code: string | null }
 export interface QueueOptions { now?: () => Date; random?: () => number; maxAttempts?: number; lockTimeoutMs?: number }
-const MAX_ATTEMPTS = 8;
+export const MAX_ATTEMPTS = 8;
 const safeCode = /^[a-z0-9_]{1,64}$/i;
 
 export class WebhookQueue {
@@ -16,8 +17,9 @@ export class WebhookQueue {
     this.now = options.now ?? (() => new Date()); this.random = options.random ?? Math.random;
     this.maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS; this.lockTimeoutMs = options.lockTimeoutMs ?? 300_000;
   }
-  async enqueue(event: WebhookEvent): Promise<'enqueued' | 'duplicate'> {
-    const { data, error } = await this.db.from('webhook_events').upsert(event, { onConflict: 'provider,dedupe_key', ignoreDuplicates: true }).select('id');
+  async enqueue(event: WebhookEventInput): Promise<'enqueued' | 'duplicate'> {
+    const inserted = { ...event, id: event.id ?? crypto.randomUUID() };
+    const { data, error } = await this.db.from('webhook_events').upsert(inserted, { onConflict: 'provider,dedupe_key', ignoreDuplicates: true }).select('id');
     if (error) throw error;
     return data?.length ? 'enqueued' : 'duplicate';
   }

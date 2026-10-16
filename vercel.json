@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/internal/webhook-worker", "schedule": "*/1 * * * *" }
+  ]
+}
