@@ -4,19 +4,13 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 import { ScopeError, type SessionProfile } from '@/lib/server/scope';
 import { requireKnownRole } from '@/lib/server/rbac';
-
-let serviceClient: SupabaseClient | null = null;
+import { getServiceClient as getProfileServiceClient } from '@/lib/server/bootstrapOwner';
 
 /** Service-role client. Bypasses RLS: every query MUST filter by a server-resolved business. */
 export function getServiceClient(): SupabaseClient {
-  if (!serviceClient) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) throw new Error('Supabase service credentials are not configured');
-    serviceClient = createClient(url, key, { auth: { persistSession: false } });
-  }
-  return serviceClient;
+  return getProfileServiceClient();
 }
+
 
 /** Resolve the caller's server-owned profile identically for cookie and bearer sessions. */
 async function loadSessionProfile(userId: string): Promise<SessionProfile | null> {

@@ -48,57 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     .single();
 
                 if (error) {
-                    // Try to create profile if it doesn't exist
-                    if (error.code === 'PGRST116') {
-                        console.log('[Auth] Profile not found, creating new profile...');
-                        const { data: { user } } = await supabase.auth.getUser();
-                        
-                        if (user) {
-                            let role: 'admin' | 'owner' | 'employee' = 'owner';
-                            
-                            // Hardcode the specific admin email for now, or use a better heuristic/metadata
-                            if (user.email === 'jonny.correa@gmail.com' || user.email === 'admin@payalert.com') {
-                                role = 'admin';
-                            } else if (user.user_metadata?.role) {
-                                role = user.user_metadata.role;
-                            }
-
-                            const newProfile = {
-                                id: userId,
-                                email: user.email,
-                                role: role, 
-                                first_name: user.user_metadata?.first_name || '',
-                                last_name: user.user_metadata?.last_name || '',
-                                created_at: new Date().toISOString(),
-                                updated_at: new Date().toISOString()
-                            };
-
-                            const { data: createdProfile, error: createError } = await supabase
-                                .from('users')
-                                .insert([newProfile])
-                                .select()
-                                .single();
-                            
-                            if (createError) {
-                                console.error('[Auth] Error creating profile:', createError);
-                                throw createError;
-                            }
-                            
-                            console.log('[Auth] Profile created:', createdProfile);
-                            setProfile(createdProfile);
-                            return;
-                        }
-                    }
-                    console.error('[Auth] Error fetching profile:', error.message, error.details);
-                    throw error;
+                    setProfile(null);
+                    return;
                 }
-                console.log('[Auth] Profile fetched:', data);
                 setProfile(data);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('[Auth] Catch error fetching profile:', err);
                 
                 // If it's a critical RLS or schema error (like recursion), force logout to break the loop
-                if (err.message?.includes('infinite recursion') || err.message?.includes('policy')) {
+                if (err instanceof Error && (err.message.includes('infinite recursion') || err.message.includes('policy'))) {
                     console.error('[Auth] Critical DB error detected. Forcing logout.');
                     await supabase.auth.signOut();
                     router.push('/login');
@@ -139,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         return () => subscription.unsubscribe();
-    }, []);
+    }, [router]);
 
     const signOut = async () => {
         setProfile(null);
