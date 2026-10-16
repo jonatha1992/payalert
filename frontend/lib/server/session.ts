@@ -18,29 +18,12 @@ export function getServiceClient(): SupabaseClient {
   return serviceClient;
 }
 
-/** Reads the Supabase session from the request cookies and loads the caller's profile. */
-export async function getSessionProfile(request: NextRequest): Promise<SessionProfile | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      // Route handlers only read the session; token refresh happens in proxy.ts.
-      setAll: () => {},
-    },
-  });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
+/** Resolve the caller's server-owned profile identically for cookie and bearer sessions. */
+async function loadSessionProfile(userId: string): Promise<SessionProfile | null> {
   const { data: row } = await getServiceClient()
     .from('users')
     .select('id, role, business_id, assigned_store_id')
-    .eq('id', user.id)
+    .eq('id', userId)
     .maybeSingle();
   if (!row) return null;
 
@@ -50,6 +33,33 @@ export async function getSessionProfile(request: NextRequest): Promise<SessionPr
     businessId: (row.business_id as string | null) ?? null,
     assignedStoreId: (row.assigned_store_id as string | null) ?? null,
   };
+}
+
+/** Reads and verifies a Supabase session from bearer auth or request cookies. */
+export async function getSessionProfile(request: NextRequest): Promise<SessionProfile | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+
+  const authorization = request.headers.get('authorization');
+  const bearer = authorization?.match(/^Bearer\s+(.+)$/i);
+  if (authorization?.toLowerCase().startsWith('bearer ')) {
+    if (!bearer) return null;
+    const supabase = createClient(url, anonKey, { auth: { persistSession: false } });
+    const { data: { user }, error } = await supabase.auth.getUser(bearer[1]);
+    if (error || !user) return null;
+    return loadSessionProfile(user.id);
+  }
+
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      // Route handlers only read the session; token refresh happens in proxy.ts.
+      setAll: () => {},
+    },
+  });
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? loadSessionProfile(user.id) : null;
 }
 
 /** Confirms a store id belongs to the business before using it in a service-role query. */
