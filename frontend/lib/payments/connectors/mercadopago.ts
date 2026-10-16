@@ -38,7 +38,9 @@ export class MercadoPagoConnector implements PaymentConnector {
       const response = await this.fetchImpl('https://api.mercadopago.com/users/me', {
         method: 'GET', headers: { Authorization: `Bearer ${connection.credentials.access_token}` },
       });
-      return { ok: response.ok };
+      if (response.ok) return { ok: true };
+      if (response.status === 401 || response.status === 403) return { ok: false, detail: 'invalid_token' };
+      return { ok: false, detail: response.status >= 500 || response.status === 429 ? 'provider_unavailable' : 'health_check_failed' };
     } catch {
       return { ok: false, detail: 'request_failed' };
     }

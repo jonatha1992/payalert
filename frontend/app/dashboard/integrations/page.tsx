@@ -23,6 +23,7 @@ interface ConnectionView {
     status: string;
     hasWebhookSecret: boolean;
     lastSyncAt: string | null;
+    lastError: string | null;
 }
 
 interface CreateConnectionInput {
@@ -51,6 +52,7 @@ function statusClass(status: string) {
 export default function IntegrationsPage() {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [healthCheckId, setHealthCheckId] = useState<string | null>(null);
     const [stores, setStores] = useState<Store[]>([]);
     const [connections, setConnections] = useState<ConnectionView[]>([]);
     const [selectedProvider, setSelectedProvider] = useState<'mercado_pago' | 'uala' | null>(null);
@@ -140,17 +142,21 @@ export default function IntegrationsPage() {
         };
 
         const checkHealth = async (id: string) => {
-            setLoading(true);
+            setHealthCheckId(id);
             try {
-                const response = await fetch(`/api/integrations/${encodeURIComponent(id)}/health`);
+                const response = await fetch(`/api/integrations/${encodeURIComponent(id)}/health`, { method: 'GET', cache: 'no-store' });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Error en verificación');
-                setConnections(previous => previous.map(c => c.id === id ? { ...c, lastSyncAt: new Date().toISOString(), status: data.ok ? 'CONNECTED' : 'ERROR' } : c));
-                toast.success(data.ok ? 'Conexión verificada correctamente' : `Verificación falló: ${data.detail}`);
-            } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Error al verificar');
+                if (!response.ok) throw new Error('No pudimos comprobar la conexión. Inténtalo nuevamente.');
+                setConnections(previous => previous.map(c => c.id === id ? {
+                    ...c, lastSyncAt: data.lastSyncAt, lastError: data.detail,
+                    status: data.status,
+                } : c));
+                if (data.ok) toast.success('Conexión verificada correctamente');
+                else toast.error('No se pudo conectar. Revisa las credenciales o inténtalo más tarde.');
+            } catch {
+                toast.error('No pudimos comprobar la conexión. Inténtalo nuevamente.');
             } finally {
-                setLoading(false);
+                setHealthCheckId(null);
             }
         };
 
@@ -202,10 +208,11 @@ export default function IntegrationsPage() {
                                                                             <span className={`px-2 py-1 rounded-full ${statusClass(connection.status)}`}>{connection.status}</span>
                                                                             {connection.hasWebhookSecret && <span className="text-gray-500 dark:text-gray-400">firma configurada</span>}
                                                                             {connection.lastSyncAt && <span className="text-gray-400 dark:text-gray-500">última verificación: {time(connection.lastSyncAt)}</span>}
+                                    {connection.lastError && <span className="text-amber-700 dark:text-amber-400" title={`Diagnóstico: ${connection.lastError}`}>Diagnóstico: {connection.lastError}</span>}
                                                                         </div>
                                                                     </div>
                                                                     <div className="flex items-center gap-2">
-                                                                        <button onClick={() => void checkHealth(connection.id)} disabled={loading || connection.status === 'DISCONNECTED'} className="px-3 py-1.5 text-xs border border-current rounded-lg disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800">Verificar</button>
+                                                                        <button onClick={() => void checkHealth(connection.id)} disabled={healthCheckId !== null || connection.status === 'DISCONNECTED'} className="px-3 py-1.5 text-xs border border-current rounded-lg disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800">{healthCheckId === connection.id ? 'Comprobando...' : connection.status === 'REAUTH_REQUIRED' ? 'Reconectar' : 'Verificar'}</button>
                                                                         <button onClick={() => void handleDelete(connection.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Eliminar integración"><Trash2 size={18} /></button>
                                                                     </div>
                             </div>

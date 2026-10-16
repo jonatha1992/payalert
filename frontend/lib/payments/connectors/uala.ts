@@ -70,7 +70,11 @@ export class UalaConnector implements PaymentConnector {
     try {
       await this.token(connection);
       return { ok: true };
-    } catch {
+    } catch (error) {
+      if (error instanceof ProviderError && (error.status === 401 || error.status === 403)) {
+        return { ok: false, detail: 'invalid_token' };
+      }
+      if (error instanceof ProviderError && error.retriable) return { ok: false, detail: 'provider_unavailable' };
       return { ok: false, detail: 'token_request_failed' };
     }
   }

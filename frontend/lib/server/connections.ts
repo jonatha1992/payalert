@@ -4,6 +4,7 @@ import { UalaConnector } from '@/lib/payments/connectors/uala';
 import { MockConnector } from '@/lib/payments/connectors/mock';
 import { encryptSecret } from '@/lib/payments/secretBox';
 import type { PaymentConnection, Provider } from '@/lib/payments/types';
+import { healthStatusForResult, safeHealthDetail } from '@/lib/payments/connectionHealth';
 import { ScopeError } from '@/lib/server/scope';
 import { getServiceClient } from '@/lib/server/session';
 
@@ -196,14 +197,12 @@ export async function disconnectConnection(businessId: string, userId: string, i
   }
 
   /**
-   * Verifica la salud de una conexión consultando al proveedor y actualiza
-   * last_sync_at / last_error / status en la base de datos.
-   * Devuelve { ok, detail }.
+   * Verifica una conexión y persiste el estado con diagnósticos seguros.
    */
   export async function checkConnectionHealth(
     businessId: string,
     connectionId: string
-  ): Promise<{ ok: boolean; detail?: string }> {
+  ): Promise<{ ok: boolean; status: string; detail: string | null; lastSyncAt: string }> {
     const db = getServiceClient();
     const { data: connection, error } = await db
       .from('payment_connections')
@@ -218,48 +217,43 @@ export async function disconnectConnection(businessId: string, userId: string, i
         credentials_encrypted: string;
         webhook_secret_encrypted: string | null;
       }>();
-
     if (error) throw error;
     if (!connection) throw new ScopeError('Integración no encontrada', 403);
 
-    // No chequear si ya está desconectada
+    const now = new Date().toISOString();
+    let check: { ok: boolean; detail?: string; category?: 'reauth_required' | 'degraded' | 'error' } = { ok: false, detail: 'health_check_failed' };
     if (connection.status === 'DISCONNECTED') {
-      return { ok: false, detail: 'disconnected' };
+      check = { ok: false, detail: 'disconnected' };
+    } else {
+      let credentials: Record<string, string> | null = null;
+      try {
+        const { decryptSecret } = await import('@/lib/payments/secretBox');
+        const parsed: unknown = JSON.parse(decryptSecret(connection.credentials_encrypted));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid credentials shape');
+        credentials = parsed as Record<string, string>;
+      } catch {
+        check = { ok: false, detail: 'credentials_invalid', category: 'reauth_required' };
+      }
+      if (credentials) {
+        try {
+          const { decryptSecret } = await import('@/lib/payments/secretBox');
+          check = await getConnector(connection.provider).healthCheck({
+            id: connection.id, businessId, storeId: null, provider: connection.provider,
+            providerAccountId: connection.provider_account_id,
+            status: connection.status as PaymentConnection['status'], credentials,
+            webhookSecret: connection.webhook_secret_encrypted ? decryptSecret(connection.webhook_secret_encrypted) : null,
+          });
+        } catch {
+          check = { ok: false, detail: 'health_check_failed' };
+        }
+      }
     }
 
-    const { decryptSecret } = await import('@/lib/payments/secretBox');
-    let credentials: Record<string, string>;
-    try {
-      credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as Record<string, string>;
-    } catch {
-      return { ok: false, detail: 'credenciales_invalidas' };
-    }
-
-    const connector = getConnector(connection.provider);
-    const result = await connector.healthCheck({
-          id: connection.id,
-          businessId,
-          storeId: null,
-          provider: connection.provider,
-          providerAccountId: connection.provider_account_id,
-          status: connection.status as any,
-          credentials,
-          webhookSecret: connection.webhook_secret_encrypted ? decryptSecret(connection.webhook_secret_encrypted) : null,
-        });
-
-        const now = new Date().toISOString();
-        const newStatus = result.ok ? 'CONNECTED' : 'ERROR';
-        const { error: updErr } = await db
-          .from('payment_connections')
-          .update({
-            status: newStatus,
-            last_sync_at: now,
-            last_error: result.ok ? null : (result as any).detail || 'health_check_failed',
-            updated_at: now,
-          })
-          .eq('id', connectionId)
-          .eq('business_id', businessId);
-    if (updErr) console.error('[health] update failed:', updErr.message);
-
-    return result;
+    const state = healthStatusForResult(check);
+    const detail = state.lastError ? safeHealthDetail(check.detail) : null;
+    const { error: updateError } = await db.from('payment_connections').update({
+      status: state.status, last_sync_at: now, last_error: detail, updated_at: now,
+    }).eq('id', connectionId).eq('business_id', businessId);
+    if (updateError) throw updateError;
+    return { ok: check.ok, status: state.status, detail, lastSyncAt: now };
   }

@@ -17,7 +17,7 @@ export async function GET(
 
     const result = await checkConnectionHealth(businessId, id);
 
-    return NextResponse.json({ ok: result.ok, detail: result.detail });
+    return NextResponse.json({ ok: result.ok, status: result.status, detail: result.detail, lastSyncAt: result.lastSyncAt });
   } catch (error) {
     const denied = scopeErrorResponse(error);
     if (denied) return denied;
