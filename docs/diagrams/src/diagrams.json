@@ -1,1 +1,1649 @@
-[{"kind":"context","title":"Contexto PayAlert","system":"PayAlert","primary":["Dueño","Gerente","Cajero","Soporte"],"secondary":["Mercado Pago","Ualá Bis","Web Push","Supabase Auth/DB","Vercel Cron"]},{"kind":"usecase","title":"PN1 Conexiones y salud","module":"PayAlert · integraciones","primary":["Dueño","Gerente"],"secondary":["Mercado Pago","Ualá Bis"],"usecases":[{"id":"CU-01","name":"Conectar cuenta","actors":["Dueño","Gerente"]},{"id":"CU-02","name":"Diagnosticar conexión","actors":["Dueño","Gerente"]}],"include":[["CU-01","CU-02"]],"file":"usecase-pn1"},{"kind":"usecase","title":"PN2 Pagos entrantes","module":"PayAlert · procesamiento","primary":["Proveedor"],"secondary":["Vercel Cron","Supabase DB","Web Push"],"usecases":[{"id":"CU-03","name":"Procesar evento de pago","actors":["Proveedor"]},{"id":"CU-10","name":"Reprocesar DEAD","actors":["Proveedor"]}],"include":[["CU-03","CU-10"]],"file":"usecase-pn2"},{"kind":"usecase","title":"PN3 Caja y matching","module":"PayAlert · caja","primary":["Dueño","Gerente","Cajero"],"secondary":["Proveedor"],"usecases":[{"id":"CU-04","name":"Gestionar cobro esperado","actors":["Dueño","Gerente","Cajero"]},{"id":"CU-05","name":"Resolver candidato","actors":["Dueño","Gerente","Cajero"]}],"extend":[["CU-05","CU-04"]],"file":"usecase-pn3"},{"kind":"usecase","title":"PN4 Reportes","module":"PayAlert · reportes","primary":["Dueño","Gerente","Soporte"],"secondary":["Supabase DB"],"usecases":[{"id":"CU-06","name":"Consultar y exportar","actors":["Dueño","Gerente","Soporte"]}],"file":"usecase-pn4"},{"kind":"usecase","title":"PN5 Notificaciones","module":"PayAlert · notificaciones","primary":["Dueño","Gerente","Cajero"],"secondary":["Web Push","Supabase DB"],"usecases":[{"id":"CU-07","name":"Gestionar preferencias","actors":["Dueño","Gerente","Cajero"]}],"file":"usecase-pn5"},{"kind":"usecase","title":"PN6 Administración y auditoría","module":"PayAlert · control","primary":["Dueño","Gerente","Cajero","Soporte"],"secondary":["Supabase Auth","Supabase DB"],"usecases":[{"id":"CU-08","name":"Aplicar permisos","actors":["Dueño","Gerente","Cajero","Soporte"]},{"id":"CU-09","name":"Registrar/consultar auditoría","actors":["Dueño","Gerente","Soporte"]}],"include":[["CU-08","CU-09"]],"file":"usecase-pn6"},{"kind":"activity","title":"Pago entrante → notificación","lanes":["Proveedor","Webhook API","Worker/Queue","DB/Push"],"steps":[{"id":"s","lane":"Proveedor","text":"Evento pago","type":"start"},{"id":"parse","lane":"Webhook API","text":"Leer y validar","col":0},{"id":"auth","lane":"Webhook API","text":"Firma/orden válida?","type":"decision","col":1},{"id":"reject","lane":"Webhook API","text":"Rechazar","col":2,"row":2},{"id":"enqueue","lane":"Worker/Queue","text":"Dedupe y encolar","col":2,"row":3},{"id":"ack","lane":"Webhook API","text":"ACK","col":3,"row":3},{"id":"claim","lane":"Worker/Queue","text":"Claim lote","col":4,"row":4},{"id":"fetch","lane":"Proveedor","text":"Consultar API","col":5,"row":5},{"id":"ingest","lane":"DB/Push","text":"Normalizar + ingest","col":6,"row":6},{"id":"match","lane":"DB/Push","text":"Matching","col":7,"row":7},{"id":"notify","lane":"DB/Push","text":"Push elegible","col":8,"row":8},{"id":"done","lane":"Worker/Queue","text":"Marcar DONE","col":9,"row":9,"type":"end"}],"flows":[["s","parse"],["parse","auth"],["auth","reject","no"],["auth","enqueue","si"],["enqueue","ack"],["ack","claim"],["claim","fetch"],["fetch","ingest"],["ingest","match"],["match","notify"],["notify","done"]]},{"kind":"sequence","title":"CU-01 Conectar MP OAuth","participants":[{"name":"Dueño","type":"actor"},{"name":"UI","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"},{"name":"MP","type":"entity"}],"messages":[{"from":"Dueño","to":"UI","text":"Iniciar conexión"},{"from":"UI","to":"API","text":"GET OAuth"},{"from":"API","to":"DB","text":"Persistir state hash"},{"from":"API","to":"MP","text":"Redirigir autorización"},{"from":"MP","to":"API","text":"Callback code+state","ret":true},{"from":"API","to":"DB","text":"Validar/consumir state"},{"from":"API","to":"MP","text":"Intercambiar code"},{"from":"API","to":"DB","text":"Guardar credencial cifrada"},{"from":"API","to":"UI","text":"Redirect conectado"},{"from":"UI","to":"Dueño","text":"Mostrar estado"}],"file":"sequence-cu-01"},{"kind":"sequence","title":"CU-02 Consultar salud","participants":[{"name":"Dueño","type":"actor"},{"name":"UI","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"},{"name":"Proveedor","type":"entity"}],"messages":[{"from":"Dueño","to":"UI","text":"Solicitar health"},{"from":"UI","to":"API","text":"GET health"},{"from":"API","to":"DB","text":"Resolver sesión/scope/conexión"},{"from":"API","to":"Proveedor","text":"healthCheck"},{"from":"Proveedor","to":"API","text":"Resultado","ret":true},{"from":"API","to":"DB","text":"Actualizar estado/fecha"},{"from":"API","to":"UI","text":"Diagnóstico seguro"}],"file":"sequence-cu-02"},{"kind":"sequence","title":"CU-03 Procesar evento","participants":[{"name":"Proveedor","type":"actor"},{"name":"Webhook","type":"boundary"},{"name":"Queue","type":"control"},{"name":"Worker","type":"control"},{"name":"Provider API","type":"entity"},{"name":"DB","type":"entity"},{"name":"Push","type":"entity"}],"messages":[{"from":"Proveedor","to":"Webhook","text":"POST evento"},{"from":"Webhook","to":"Webhook","text":"Parsear y verificar firma/UUID"},{"from":"Webhook","to":"Queue","text":"Encolar dedupe"},{"from":"Webhook","to":"Proveedor","text":"ACK rápido"},{"from":"Worker","to":"Queue","text":"Claim seguro"},{"from":"Worker","to":"DB","text":"Leer conexión cifrada"},{"from":"Worker","to":"Provider API","text":"Fetch transacción"},{"from":"Provider API","to":"Worker","text":"Importe/estado real","ret":true},{"from":"Worker","to":"DB","text":"Ingest y matching"},{"from":"Worker","to":"Push","text":"Enviar si elegible"},{"from":"Worker","to":"Queue","text":"Marcar DONE"}],"file":"sequence-cu-03"},{"kind":"sequence","title":"CU-04 Crear cobro","participants":[{"name":"Cajero","type":"actor"},{"name":"Terminal UI","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"},{"name":"Proveedor","type":"entity"}],"messages":[{"from":"Cajero","to":"Terminal UI","text":"Ingresar importe/referencia"},{"from":"Terminal UI","to":"API","text":"POST expected-payments"},{"from":"API","to":"DB","text":"Validar scope y persistir"},{"from":"API","to":"Proveedor","text":"Crear checkout si pedido"},{"from":"Proveedor","to":"API","text":"Order ID + URL","ret":true},{"from":"API","to":"DB","text":"Guardar datos checkout"},{"from":"API","to":"Terminal UI","text":"Cobro/estado/link"},{"from":"Terminal UI","to":"Cajero","text":"Mostrar cobro"}],"file":"sequence-cu-04"},{"kind":"sequence","title":"CU-05 Resolver candidato","participants":[{"name":"Cajero","type":"actor"},{"name":"Terminal UI","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"}],"messages":[{"from":"Cajero","to":"Terminal UI","text":"Revisar evidencia"},{"from":"Terminal UI","to":"API","text":"PATCH resolución"},{"from":"API","to":"DB","text":"Validar permiso/scope/estado"},{"from":"API","to":"DB","text":"Comprobar unicidad/guardar"},{"from":"API","to":"DB","text":"Auditar"},{"from":"API","to":"Terminal UI","text":"Resultado"},{"from":"Terminal UI","to":"Cajero","text":"Actualizar pantalla"}],"file":"sequence-cu-05"},{"kind":"sequence","title":"CU-06 Reportes/CSV","participants":[{"name":"Dueño","type":"actor"},{"name":"UI","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"}],"messages":[{"from":"Dueño","to":"UI","text":"Filtros"},{"from":"UI","to":"API","text":"GET movimientos"},{"from":"API","to":"DB","text":"Validar scope/query"},{"from":"API","to":"DB","text":"Consulta paginada"},{"from":"API","to":"UI","text":"Filas + total"},{"from":"Dueño","to":"UI","text":"Pedir CSV"},{"from":"UI","to":"API","text":"GET format=csv"},{"from":"API","to":"UI","text":"Descarga CSV"}],"file":"sequence-cu-06"},{"kind":"sequence","title":"CU-07 Preferencias y push","participants":[{"name":"Usuario","type":"actor"},{"name":"Settings","type":"boundary"},{"name":"API","type":"control"},{"name":"DB","type":"entity"},{"name":"Push","type":"entity"}],"messages":[{"from":"Usuario","to":"Settings","text":"Cambiar preferencias"},{"from":"Settings","to":"API","text":"PATCH preference"},{"from":"API","to":"DB","text":"Guardar usuario/tenant"},{"from":"Usuario","to":"Settings","text":"Permitir push"},{"from":"Settings","to":"API","text":"POST subscribe"},{"from":"API","to":"DB","text":"Guardar suscripción"},{"from":"API","to":"Push","text":"Enviar en evento"},{"from":"Push","to":"Usuario","text":"Notificación","ret":true}],"file":"sequence-cu-07"},{"kind":"sequence","title":"CU-08 Control de permisos","participants":[{"name":"Usuario","type":"actor"},{"name":"UI","type":"boundary"},{"name":"API","type":"control"},{"name":"Auth","type":"entity"},{"name":"DB","type":"entity"}],"messages":[{"from":"Usuario","to":"UI","text":"Invocar acción"},{"from":"UI","to":"API","text":"Request + cookie"},{"from":"API","to":"Auth","text":"Validar sesión"},{"from":"API","to":"DB","text":"Cargar perfil"},{"from":"API","to":"API","text":"RBAC + scope"},{"from":"API","to":"DB","text":"Consultar/escribir scoped"},{"from":"API","to":"UI","text":"Respuesta o error"}],"file":"sequence-cu-08"},{"kind":"sequence","title":"CU-09 Auditoría","participants":[{"name":"Actor","type":"actor"},{"name":"Acción","type":"boundary"},{"name":"Audit writer","type":"control"},{"name":"DB","type":"entity"}],"messages":[{"from":"Actor","to":"Acción","text":"Acción sensible"},{"from":"Acción","to":"Audit writer","text":"Evento sanitizado"},{"from":"Audit writer","to":"DB","text":"Insert actor/tenant/action"},{"from":"DB","to":"Audit writer","text":"Confirmación","ret":true},{"from":"Audit writer","to":"Acción","text":"Resultado"}],"file":"sequence-cu-09"},{"kind":"sequence","title":"CU-10 Replay DEAD","participants":[{"name":"Dueño","type":"actor"},{"name":"Replay API","type":"boundary"},{"name":"Queue","type":"control"},{"name":"DB","type":"entity"},{"name":"Worker","type":"control"}],"messages":[{"from":"Dueño","to":"Replay API","text":"Solicitar replay"},{"from":"Replay API","to":"DB","text":"Validar owner/tenant/evento"},{"from":"Replay API","to":"Queue","text":"Reencolar DEAD"},{"from":"Replay API","to":"DB","text":"Auditar replay"},{"from":"Worker","to":"Queue","text":"Claim y procesar CU-03"}],"file":"sequence-cu-10"},{"kind":"class","title":"Clases del dominio PayAlert","cols":3,"classes":[{"name":"User","attrs":["id: UUID","role: legacy Role","business_id: UUID","assigned_store_id: UUID"]},{"name":"Business","attrs":["id: UUID","name"]},{"name":"Store","attrs":["id: UUID","business_id: UUID"]},{"name":"PaymentConnection","attrs":["id: UUID","provider","status","credentials_encrypted"]},{"name":"ExpectedPayment","attrs":["id: UUID","amount/currency","status","matched_transaction_id"]},{"name":"Transaction","attrs":["id: UUID","provider/external_id","amount/status","expected_payment_id"]},{"name":"WebhookEvent","attrs":["id: UUID","dedupe_key","status/attempts"]},{"name":"AuditLog","attrs":["id: UUID","business_id","user_id/action"]},{"name":"NotificationPreference","attrs":["user_id/business_id","push/sound/email"]}],"relations":[{"from":"Business","to":"User","label":"1..*","type":"assoc"},{"from":"Business","to":"Store","label":"1..*","type":"assoc"},{"from":"Business","to":"PaymentConnection","label":"1..*","type":"assoc"},{"from":"Business","to":"ExpectedPayment","label":"1..*","type":"assoc"},{"from":"ExpectedPayment","to":"Transaction","label":"0..1","type":"assoc"},{"from":"PaymentConnection","to":"WebhookEvent","label":"1..*","type":"assoc"},{"from":"Business","to":"AuditLog","label":"1..*","type":"assoc"},{"from":"User","to":"NotificationPreference","label":"1..*","type":"assoc"}]},{"kind":"ddl","title":"ER — snapshot legacy, no vigente","ddl":"CREATE TABLE businesses (id UUID PRIMARY KEY, name TEXT); CREATE TABLE users (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), role TEXT); CREATE TABLE stores (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), name TEXT); CREATE TABLE payment_connections (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), store_id UUID REFERENCES stores(id), provider TEXT, status TEXT); CREATE TABLE expected_payments (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), store_id UUID REFERENCES stores(id), amount NUMERIC, currency TEXT, status TEXT, matched_transaction_id UUID); CREATE TABLE transactions (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), connection_id UUID REFERENCES payment_connections(id), expected_payment_id UUID REFERENCES expected_payments(id), amount NUMERIC, status TEXT); CREATE TABLE webhook_events (id UUID PRIMARY KEY, connection_id UUID REFERENCES payment_connections(id), dedupe_key TEXT, status TEXT); CREATE TABLE audit_logs (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), user_id UUID REFERENCES users(id), action TEXT); CREATE TABLE notification_preferences (user_id UUID REFERENCES users(id), business_id UUID REFERENCES businesses(id), push BOOLEAN, email BOOLEAN);"},{"kind":"state","title":"Estado de ExpectedPayment","file":"state-expected-payment","states":[{"id":"waiting","name":"WAITING","type":"initial"},{"id":"matched","name":"MATCHED","type":"state"},{"id":"expired","name":"EXPIRED","type":"final"},{"id":"review","name":"MANUAL_REVIEW","type":"state"},{"id":"cancelled","name":"CANCELLED","type":"final"}],"transitions":[["waiting","matched","match válido"],["waiting","expired","expiración"],["waiting","review","ambigüedad"],["waiting","cancelled","cancelación"],["review","matched","resolución confirmada"],["review","cancelled","cancelación"]]},{"kind":"state","title":"Estado de PaymentConnection","file":"state-connection","states":[{"id":"connected","name":"CONNECTED","type":"initial"},{"id":"degraded","name":"DEGRADED","type":"state"},{"id":"reauth","name":"REAUTH_REQUIRED","type":"state"},{"id":"disconnected","name":"DISCONNECTED","type":"final"},{"id":"error","name":"ERROR","type":"state"}],"transitions":[["connected","degraded","fallo temporal"],["connected","reauth","credencial rechazada"],["connected","error","error irrecuperable"],["degraded","connected","health OK"],["reauth","connected","credencial renovada"],["connected","disconnected","desconexión"]]},{"kind":"state","title":"Estado de WebhookEvent","file":"state-webhook","states":[{"id":"pending","name":"PENDING","type":"initial"},{"id":"processing","name":"PROCESSING","type":"state"},{"id":"done","name":"DONE","type":"final"},{"id":"failed","name":"FAILED","type":"state"},{"id":"dead","name":"DEAD","type":"state"}],"transitions":[["pending","processing","claim"],["failed","processing","retry"],["processing","done","éxito"],["processing","failed","error reintentable"],["failed","dead","umbral agotado"],["dead","pending","replay owner"]]},{"kind":"architecture","file":"architecture","title":"Arquitectura lógica actual","groups":[{"name":"Web client","nodes":[{"id":"browser","name":"Next.js App Router / PWA","type":"device"},{"id":"ui","name":"Dashboard / Caja / Reportes","type":"component"}]},{"name":"Vercel","nodes":[{"id":"api","name":"Server/API Routes + proxy","type":"component"},{"id":"worker","name":"Webhook worker / Cron","type":"component"}]},{"name":"Supabase","nodes":[{"id":"auth","name":"Supabase Auth","type":"component"},{"id":"db","name":"PostgreSQL + RLS","type":"database"}]},{"name":"Proveedores","nodes":[{"id":"mp","name":"Mercado Pago API/Webhook","type":"external"},{"id":"uala","name":"Ualá Bis API/Callback","type":"external"}]},{"name":"Push","nodes":[{"id":"push","name":"Web Push","type":"external"}]}],"links":[["browser","ui","render"],["ui","api","HTTPS"],["api","auth","session"],["api","db","TLS"],["api","mp","OAuth/fetch"],["mp","api","webhook HTTPS"],["api","uala","fetch order"],["uala","api","callback"],["worker","db","claim/ingest"],["worker","push","push"]]},{"kind":"deployment","file":"deployment","title":"Despliegue [Inferido] — validar staging","groups":[{"name":"Cliente","nodes":[{"id":"browser","name":"Browser","type":"user"}]},{"name":"Vercel","nodes":[{"id":"app","name":"Next.js App/API","type":"component"},{"id":"cron","name":"Cron worker","type":"component"}]},{"name":"Supabase","nodes":[{"id":"auth","name":"Auth","type":"component"},{"id":"db","name":"PostgreSQL/RLS","type":"database"}]},{"name":"Terceros","nodes":[{"id":"mp","name":"Mercado Pago","type":"external"},{"id":"uala","name":"Ualá Bis","type":"external"},{"id":"push","name":"Web Push","type":"external"}]}],"links":[["browser","app","HTTPS"],["app","auth","API"],["app","db","TLS"],["cron","app","Bearer CRON_SECRET"],["mp","app","webhook"],["uala","app","callback"],["app","mp","OAuth/fetch"],["app","uala","fetch order"],["app","push","push"]]}]
+[
+  {
+    "kind": "context",
+    "title": "Contexto PayAlert",
+    "system": "PayAlert",
+    "primary": [
+      "Dueño",
+      "Gerente",
+      "Cajero",
+      "Soporte"
+    ],
+    "secondary": [
+      "Mercado Pago",
+      "Ualá Bis",
+      "Web Push",
+      "Supabase Auth/DB",
+      "Vercel Cron"
+    ]
+  },
+  {
+    "kind": "usecase",
+    "title": "PN1 Conexiones y salud",
+    "module": "PayAlert · integraciones",
+    "primary": [
+      "Dueño",
+      "Gerente"
+    ],
+    "secondary": [
+      "Mercado Pago",
+      "Ualá Bis"
+    ],
+    "usecases": [
+      {
+        "id": "CU-01",
+        "name": "Conectar cuenta",
+        "actors": [
+          "Dueño",
+          "Gerente"
+        ]
+      },
+      {
+        "id": "CU-02",
+        "name": "Diagnosticar conexión",
+        "actors": [
+          "Dueño",
+          "Gerente"
+        ]
+      }
+    ],
+    "include": [
+      [
+        "CU-01",
+        "CU-02"
+      ]
+    ],
+    "file": "usecase-pn1"
+  },
+  {
+    "kind": "usecase",
+    "title": "PN2 Pagos entrantes",
+    "module": "PayAlert · procesamiento",
+    "primary": [
+      "Proveedor"
+    ],
+    "secondary": [
+      "Vercel Cron",
+      "Supabase DB",
+      "Web Push"
+    ],
+    "usecases": [
+      {
+        "id": "CU-03",
+        "name": "Procesar evento de pago",
+        "actors": [
+          "Proveedor"
+        ]
+      },
+      {
+        "id": "CU-10",
+        "name": "Reprocesar DEAD",
+        "actors": [
+          "Proveedor"
+        ]
+      }
+    ],
+    "include": [
+      [
+        "CU-03",
+        "CU-10"
+      ]
+    ],
+    "file": "usecase-pn2"
+  },
+  {
+    "kind": "usecase",
+    "title": "PN3 Caja y matching",
+    "module": "PayAlert · caja",
+    "primary": [
+      "Dueño",
+      "Gerente",
+      "Cajero"
+    ],
+    "secondary": [
+      "Proveedor"
+    ],
+    "usecases": [
+      {
+        "id": "CU-04",
+        "name": "Gestionar cobro esperado",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Cajero"
+        ]
+      },
+      {
+        "id": "CU-05",
+        "name": "Resolver candidato",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Cajero"
+        ]
+      }
+    ],
+    "extend": [
+      [
+        "CU-05",
+        "CU-04"
+      ]
+    ],
+    "file": "usecase-pn3"
+  },
+  {
+    "kind": "usecase",
+    "title": "PN4 Reportes",
+    "module": "PayAlert · reportes",
+    "primary": [
+      "Dueño",
+      "Gerente",
+      "Soporte"
+    ],
+    "secondary": [
+      "Supabase DB"
+    ],
+    "usecases": [
+      {
+        "id": "CU-06",
+        "name": "Consultar y exportar",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Soporte"
+        ]
+      }
+    ],
+    "file": "usecase-pn4"
+  },
+  {
+    "kind": "usecase",
+    "title": "PN5 Notificaciones",
+    "module": "PayAlert · notificaciones",
+    "primary": [
+      "Dueño",
+      "Gerente",
+      "Cajero"
+    ],
+    "secondary": [
+      "Web Push",
+      "Supabase DB"
+    ],
+    "usecases": [
+      {
+        "id": "CU-07",
+        "name": "Gestionar preferencias",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Cajero"
+        ]
+      }
+    ],
+    "file": "usecase-pn5"
+  },
+  {
+    "kind": "usecase",
+    "title": "PN6 Administración y auditoría",
+    "module": "PayAlert · control",
+    "primary": [
+      "Dueño",
+      "Gerente",
+      "Cajero",
+      "Soporte"
+    ],
+    "secondary": [
+      "Supabase Auth",
+      "Supabase DB"
+    ],
+    "usecases": [
+      {
+        "id": "CU-08",
+        "name": "Aplicar permisos",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Cajero",
+          "Soporte"
+        ]
+      },
+      {
+        "id": "CU-09",
+        "name": "Registrar/consultar auditoría",
+        "actors": [
+          "Dueño",
+          "Gerente",
+          "Soporte"
+        ]
+      }
+    ],
+    "include": [
+      [
+        "CU-08",
+        "CU-09"
+      ]
+    ],
+    "file": "usecase-pn6"
+  },
+  {
+    "kind": "activity",
+    "title": "Pago entrante → notificación",
+    "lanes": [
+      "Proveedor",
+      "Webhook API",
+      "Worker/Queue",
+      "DB/Push"
+    ],
+    "steps": [
+      {
+        "id": "s",
+        "lane": "Proveedor",
+        "text": "Evento pago",
+        "type": "start"
+      },
+      {
+        "id": "parse",
+        "lane": "Webhook API",
+        "text": "Leer y validar",
+        "col": 0
+      },
+      {
+        "id": "auth",
+        "lane": "Webhook API",
+        "text": "Firma/orden válida?",
+        "type": "decision",
+        "col": 1
+      },
+      {
+        "id": "reject",
+        "lane": "Webhook API",
+        "text": "Rechazar",
+        "col": 2,
+        "row": 2
+      },
+      {
+        "id": "enqueue",
+        "lane": "Worker/Queue",
+        "text": "Dedupe y encolar",
+        "col": 2,
+        "row": 3
+      },
+      {
+        "id": "ack",
+        "lane": "Webhook API",
+        "text": "ACK",
+        "col": 3,
+        "row": 3
+      },
+      {
+        "id": "claim",
+        "lane": "Worker/Queue",
+        "text": "Claim lote",
+        "col": 4,
+        "row": 4
+      },
+      {
+        "id": "fetch",
+        "lane": "Proveedor",
+        "text": "Consultar API",
+        "col": 5,
+        "row": 5
+      },
+      {
+        "id": "ingest",
+        "lane": "DB/Push",
+        "text": "Normalizar + ingest",
+        "col": 6,
+        "row": 6
+      },
+      {
+        "id": "match",
+        "lane": "DB/Push",
+        "text": "Matching",
+        "col": 7,
+        "row": 7
+      },
+      {
+        "id": "notify",
+        "lane": "DB/Push",
+        "text": "Push elegible",
+        "col": 8,
+        "row": 8
+      },
+      {
+        "id": "done",
+        "lane": "Worker/Queue",
+        "text": "Marcar DONE",
+        "col": 9,
+        "row": 9,
+        "type": "end"
+      }
+    ],
+    "flows": [
+      [
+        "s",
+        "parse"
+      ],
+      [
+        "parse",
+        "auth"
+      ],
+      [
+        "auth",
+        "reject",
+        "no"
+      ],
+      [
+        "auth",
+        "enqueue",
+        "si"
+      ],
+      [
+        "enqueue",
+        "ack"
+      ],
+      [
+        "ack",
+        "claim"
+      ],
+      [
+        "claim",
+        "fetch"
+      ],
+      [
+        "fetch",
+        "ingest"
+      ],
+      [
+        "ingest",
+        "match"
+      ],
+      [
+        "match",
+        "notify"
+      ],
+      [
+        "notify",
+        "done"
+      ]
+    ]
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-01 Conectar MP OAuth",
+    "participants": [
+      {
+        "name": "Dueño",
+        "type": "actor"
+      },
+      {
+        "name": "UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "MP",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Dueño",
+        "to": "UI",
+        "text": "Iniciar conexión"
+      },
+      {
+        "from": "UI",
+        "to": "API",
+        "text": "GET OAuth"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Persistir state hash"
+      },
+      {
+        "from": "API",
+        "to": "MP",
+        "text": "Redirigir autorización"
+      },
+      {
+        "from": "MP",
+        "to": "API",
+        "text": "Callback code+state",
+        "ret": true
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Validar/consumir state"
+      },
+      {
+        "from": "API",
+        "to": "MP",
+        "text": "Intercambiar code"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Guardar credencial cifrada"
+      },
+      {
+        "from": "API",
+        "to": "UI",
+        "text": "Redirect conectado"
+      },
+      {
+        "from": "UI",
+        "to": "Dueño",
+        "text": "Mostrar estado"
+      }
+    ],
+    "file": "sequence-cu-01"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-02 Consultar salud",
+    "participants": [
+      {
+        "name": "Dueño",
+        "type": "actor"
+      },
+      {
+        "name": "UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "Proveedor",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Dueño",
+        "to": "UI",
+        "text": "Solicitar health"
+      },
+      {
+        "from": "UI",
+        "to": "API",
+        "text": "GET health"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Resolver sesión/scope/conexión"
+      },
+      {
+        "from": "API",
+        "to": "Proveedor",
+        "text": "healthCheck"
+      },
+      {
+        "from": "Proveedor",
+        "to": "API",
+        "text": "Resultado",
+        "ret": true
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Actualizar estado/fecha"
+      },
+      {
+        "from": "API",
+        "to": "UI",
+        "text": "Diagnóstico seguro"
+      }
+    ],
+    "file": "sequence-cu-02"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-03 Procesar evento",
+    "participants": [
+      {
+        "name": "Proveedor",
+        "type": "actor"
+      },
+      {
+        "name": "Webhook",
+        "type": "boundary"
+      },
+      {
+        "name": "Queue",
+        "type": "control"
+      },
+      {
+        "name": "Worker",
+        "type": "control"
+      },
+      {
+        "name": "Provider API",
+        "type": "entity"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "Push",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Proveedor",
+        "to": "Webhook",
+        "text": "POST evento"
+      },
+      {
+        "from": "Webhook",
+        "to": "Webhook",
+        "text": "Parsear y verificar firma/UUID"
+      },
+      {
+        "from": "Webhook",
+        "to": "Queue",
+        "text": "Encolar dedupe"
+      },
+      {
+        "from": "Webhook",
+        "to": "Proveedor",
+        "text": "ACK rápido"
+      },
+      {
+        "from": "Worker",
+        "to": "Queue",
+        "text": "Claim seguro"
+      },
+      {
+        "from": "Worker",
+        "to": "DB",
+        "text": "Leer conexión cifrada"
+      },
+      {
+        "from": "Worker",
+        "to": "Provider API",
+        "text": "Fetch transacción"
+      },
+      {
+        "from": "Provider API",
+        "to": "Worker",
+        "text": "Importe/estado real",
+        "ret": true
+      },
+      {
+        "from": "Worker",
+        "to": "DB",
+        "text": "Ingest y matching"
+      },
+      {
+        "from": "Worker",
+        "to": "Push",
+        "text": "Enviar si elegible"
+      },
+      {
+        "from": "Worker",
+        "to": "Queue",
+        "text": "Marcar DONE"
+      }
+    ],
+    "file": "sequence-cu-03"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-04 Crear cobro",
+    "participants": [
+      {
+        "name": "Cajero",
+        "type": "actor"
+      },
+      {
+        "name": "Terminal UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "Proveedor",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Cajero",
+        "to": "Terminal UI",
+        "text": "Ingresar importe/referencia"
+      },
+      {
+        "from": "Terminal UI",
+        "to": "API",
+        "text": "POST expected-payments"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Validar scope y persistir"
+      },
+      {
+        "from": "API",
+        "to": "Proveedor",
+        "text": "Crear checkout si pedido"
+      },
+      {
+        "from": "Proveedor",
+        "to": "API",
+        "text": "Order ID + URL",
+        "ret": true
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Guardar datos checkout"
+      },
+      {
+        "from": "API",
+        "to": "Terminal UI",
+        "text": "Cobro/estado/link"
+      },
+      {
+        "from": "Terminal UI",
+        "to": "Cajero",
+        "text": "Mostrar cobro"
+      }
+    ],
+    "file": "sequence-cu-04"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-05 Resolver candidato",
+    "participants": [
+      {
+        "name": "Cajero",
+        "type": "actor"
+      },
+      {
+        "name": "Terminal UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Cajero",
+        "to": "Terminal UI",
+        "text": "Revisar evidencia"
+      },
+      {
+        "from": "Terminal UI",
+        "to": "API",
+        "text": "PATCH resolución"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Validar permiso/scope/estado"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Comprobar unicidad/guardar"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Auditar"
+      },
+      {
+        "from": "API",
+        "to": "Terminal UI",
+        "text": "Resultado"
+      },
+      {
+        "from": "Terminal UI",
+        "to": "Cajero",
+        "text": "Actualizar pantalla"
+      }
+    ],
+    "file": "sequence-cu-05"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-06 Reportes/CSV",
+    "participants": [
+      {
+        "name": "Dueño",
+        "type": "actor"
+      },
+      {
+        "name": "UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Dueño",
+        "to": "UI",
+        "text": "Filtros"
+      },
+      {
+        "from": "UI",
+        "to": "API",
+        "text": "GET movimientos"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Validar scope/query"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Consulta paginada"
+      },
+      {
+        "from": "API",
+        "to": "UI",
+        "text": "Filas + total"
+      },
+      {
+        "from": "Dueño",
+        "to": "UI",
+        "text": "Pedir CSV"
+      },
+      {
+        "from": "UI",
+        "to": "API",
+        "text": "GET format=csv"
+      },
+      {
+        "from": "API",
+        "to": "UI",
+        "text": "Descarga CSV"
+      }
+    ],
+    "file": "sequence-cu-06"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-07 Preferencias y push",
+    "participants": [
+      {
+        "name": "Usuario",
+        "type": "actor"
+      },
+      {
+        "name": "Settings",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "Push",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Usuario",
+        "to": "Settings",
+        "text": "Cambiar preferencias"
+      },
+      {
+        "from": "Settings",
+        "to": "API",
+        "text": "PATCH preference"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Guardar usuario/tenant"
+      },
+      {
+        "from": "Usuario",
+        "to": "Settings",
+        "text": "Permitir push"
+      },
+      {
+        "from": "Settings",
+        "to": "API",
+        "text": "POST subscribe"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Guardar suscripción"
+      },
+      {
+        "from": "API",
+        "to": "Push",
+        "text": "Enviar en evento"
+      },
+      {
+        "from": "Push",
+        "to": "Usuario",
+        "text": "Notificación",
+        "ret": true
+      }
+    ],
+    "file": "sequence-cu-07"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-08 Control de permisos",
+    "participants": [
+      {
+        "name": "Usuario",
+        "type": "actor"
+      },
+      {
+        "name": "UI",
+        "type": "boundary"
+      },
+      {
+        "name": "API",
+        "type": "control"
+      },
+      {
+        "name": "Auth",
+        "type": "entity"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Usuario",
+        "to": "UI",
+        "text": "Invocar acción"
+      },
+      {
+        "from": "UI",
+        "to": "API",
+        "text": "Request + cookie"
+      },
+      {
+        "from": "API",
+        "to": "Auth",
+        "text": "Validar sesión"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Cargar perfil"
+      },
+      {
+        "from": "API",
+        "to": "API",
+        "text": "RBAC + scope"
+      },
+      {
+        "from": "API",
+        "to": "DB",
+        "text": "Consultar/escribir scoped"
+      },
+      {
+        "from": "API",
+        "to": "UI",
+        "text": "Respuesta o error"
+      }
+    ],
+    "file": "sequence-cu-08"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-09 Auditoría",
+    "participants": [
+      {
+        "name": "Actor",
+        "type": "actor"
+      },
+      {
+        "name": "Acción",
+        "type": "boundary"
+      },
+      {
+        "name": "Audit writer",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Actor",
+        "to": "Acción",
+        "text": "Acción sensible"
+      },
+      {
+        "from": "Acción",
+        "to": "Audit writer",
+        "text": "Evento sanitizado"
+      },
+      {
+        "from": "Audit writer",
+        "to": "DB",
+        "text": "Insert actor/tenant/action"
+      },
+      {
+        "from": "DB",
+        "to": "Audit writer",
+        "text": "Confirmación",
+        "ret": true
+      },
+      {
+        "from": "Audit writer",
+        "to": "Acción",
+        "text": "Resultado"
+      }
+    ],
+    "file": "sequence-cu-09"
+  },
+  {
+    "kind": "sequence",
+    "title": "CU-10 Replay DEAD",
+    "participants": [
+      {
+        "name": "Dueño",
+        "type": "actor"
+      },
+      {
+        "name": "Replay API",
+        "type": "boundary"
+      },
+      {
+        "name": "Queue",
+        "type": "control"
+      },
+      {
+        "name": "DB",
+        "type": "entity"
+      },
+      {
+        "name": "Worker",
+        "type": "control"
+      }
+    ],
+    "messages": [
+      {
+        "from": "Dueño",
+        "to": "Replay API",
+        "text": "Solicitar replay"
+      },
+      {
+        "from": "Replay API",
+        "to": "DB",
+        "text": "Validar owner/tenant/evento"
+      },
+      {
+        "from": "Replay API",
+        "to": "Queue",
+        "text": "Reencolar DEAD"
+      },
+      {
+        "from": "Replay API",
+        "to": "DB",
+        "text": "Auditar replay"
+      },
+      {
+        "from": "Worker",
+        "to": "Queue",
+        "text": "Claim y procesar CU-03"
+      }
+    ],
+    "file": "sequence-cu-10"
+  },
+  {
+    "kind": "class",
+    "title": "Clases del dominio PayAlert",
+    "cols": 3,
+    "classes": [
+      {
+        "name": "User",
+        "attrs": [
+          "id: UUID",
+          "role: legacy Role",
+          "business_id: UUID",
+          "assigned_store_id: UUID"
+        ],
+        "at": [
+          0,
+          0
+        ]
+      },
+      {
+        "name": "Business",
+        "attrs": [
+          "id: UUID",
+          "name"
+        ],
+        "at": [
+          1,
+          1
+        ]
+      },
+      {
+        "name": "Store",
+        "attrs": [
+          "id: UUID",
+          "business_id: UUID"
+        ],
+        "at": [
+          0,
+          1
+        ]
+      },
+      {
+        "name": "PaymentConnection",
+        "attrs": [
+          "id: UUID",
+          "provider",
+          "status",
+          "credentials_encrypted"
+        ],
+        "at": [
+          0,
+          2
+        ]
+      },
+      {
+        "name": "ExpectedPayment",
+        "attrs": [
+          "id: UUID",
+          "amount/currency",
+          "status",
+          "matched_transaction_id"
+        ],
+        "at": [
+          2,
+          1
+        ]
+      },
+      {
+        "name": "Transaction",
+        "attrs": [
+          "id: UUID",
+          "provider/external_id",
+          "amount/status",
+          "expected_payment_id"
+        ],
+        "at": [
+          3,
+          1
+        ]
+      },
+      {
+        "name": "WebhookEvent",
+        "attrs": [
+          "id: UUID",
+          "dedupe_key",
+          "status/attempts"
+        ],
+        "at": [
+          1,
+          3
+        ]
+      },
+      {
+        "name": "AuditLog",
+        "attrs": [
+          "id: UUID",
+          "business_id",
+          "user_id/action"
+        ],
+        "at": [
+          2,
+          3
+        ]
+      },
+      {
+        "name": "NotificationPreference",
+        "attrs": [
+          "user_id/business_id",
+          "push/sound/email"
+        ],
+        "at": [
+          1,
+          0
+        ]
+      }
+    ],
+    "relations": [
+      {
+        "from": "Business",
+        "to": "User",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "Business",
+        "to": "Store",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "Business",
+        "to": "PaymentConnection",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "Business",
+        "to": "ExpectedPayment",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "ExpectedPayment",
+        "to": "Transaction",
+        "label": "0..1",
+        "type": "assoc"
+      },
+      {
+        "from": "PaymentConnection",
+        "to": "WebhookEvent",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "Business",
+        "to": "AuditLog",
+        "label": "1..*",
+        "type": "assoc"
+      },
+      {
+        "from": "User",
+        "to": "NotificationPreference",
+        "label": "1..*",
+        "type": "assoc"
+      }
+    ]
+  },
+  {
+    "kind": "ddl",
+    "title": "ER — snapshot legacy, no vigente",
+    "ddl": "CREATE TABLE businesses (id UUID PRIMARY KEY, name TEXT); CREATE TABLE users (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), role TEXT); CREATE TABLE stores (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), name TEXT); CREATE TABLE payment_connections (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), store_id UUID REFERENCES stores(id), provider TEXT, status TEXT); CREATE TABLE expected_payments (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), store_id UUID REFERENCES stores(id), amount NUMERIC, currency TEXT, status TEXT, matched_transaction_id UUID); CREATE TABLE transactions (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), connection_id UUID REFERENCES payment_connections(id), expected_payment_id UUID REFERENCES expected_payments(id), amount NUMERIC, status TEXT); CREATE TABLE webhook_events (id UUID PRIMARY KEY, connection_id UUID REFERENCES payment_connections(id), dedupe_key TEXT, status TEXT); CREATE TABLE audit_logs (id UUID PRIMARY KEY, business_id UUID REFERENCES businesses(id), user_id UUID REFERENCES users(id), action TEXT); CREATE TABLE notification_preferences (user_id UUID REFERENCES users(id), business_id UUID REFERENCES businesses(id), push BOOLEAN, email BOOLEAN);"
+  },
+  {
+    "kind": "state",
+    "title": "Estado de ExpectedPayment",
+    "file": "state-expected-payment",
+    "states": [
+      {
+        "id": "waiting",
+        "name": "WAITING",
+        "type": "initial"
+      },
+      {
+        "id": "matched",
+        "name": "MATCHED",
+        "type": "state"
+      },
+      {
+        "id": "expired",
+        "name": "EXPIRED",
+        "type": "final"
+      },
+      {
+        "id": "review",
+        "name": "MANUAL_REVIEW",
+        "type": "state"
+      },
+      {
+        "id": "cancelled",
+        "name": "CANCELLED",
+        "type": "final"
+      }
+    ],
+    "transitions": [
+      [
+        "waiting",
+        "matched",
+        "match válido"
+      ],
+      [
+        "waiting",
+        "expired",
+        "expiración"
+      ],
+      [
+        "waiting",
+        "review",
+        "ambigüedad"
+      ],
+      [
+        "waiting",
+        "cancelled",
+        "cancelación"
+      ],
+      [
+        "review",
+        "matched",
+        "resolución confirmada"
+      ],
+      [
+        "review",
+        "cancelled",
+        "cancelación"
+      ]
+    ]
+  },
+  {
+    "kind": "state",
+    "title": "Estado de PaymentConnection",
+    "file": "state-connection",
+    "states": [
+      {
+        "id": "connected",
+        "name": "CONNECTED",
+        "type": "initial"
+      },
+      {
+        "id": "degraded",
+        "name": "DEGRADED",
+        "type": "state"
+      },
+      {
+        "id": "reauth",
+        "name": "REAUTH_REQUIRED",
+        "type": "state"
+      },
+      {
+        "id": "disconnected",
+        "name": "DISCONNECTED",
+        "type": "final"
+      },
+      {
+        "id": "error",
+        "name": "ERROR",
+        "type": "state"
+      }
+    ],
+    "transitions": [
+      [
+        "connected",
+        "degraded",
+        "fallo temporal"
+      ],
+      [
+        "connected",
+        "reauth",
+        "credencial rechazada"
+      ],
+      [
+        "connected",
+        "error",
+        "error irrecuperable"
+      ],
+      [
+        "degraded",
+        "connected",
+        "health OK"
+      ],
+      [
+        "reauth",
+        "connected",
+        "credencial renovada"
+      ],
+      [
+        "connected",
+        "disconnected",
+        "desconexión"
+      ]
+    ]
+  },
+  {
+    "kind": "state",
+    "title": "Estado de WebhookEvent",
+    "file": "state-webhook",
+    "states": [
+      {
+        "id": "pending",
+        "name": "PENDING",
+        "type": "initial"
+      },
+      {
+        "id": "processing",
+        "name": "PROCESSING",
+        "type": "state"
+      },
+      {
+        "id": "done",
+        "name": "DONE",
+        "type": "final"
+      },
+      {
+        "id": "failed",
+        "name": "FAILED",
+        "type": "state"
+      },
+      {
+        "id": "dead",
+        "name": "DEAD",
+        "type": "state"
+      }
+    ],
+    "transitions": [
+      [
+        "pending",
+        "processing",
+        "claim"
+      ],
+      [
+        "failed",
+        "processing",
+        "retry"
+      ],
+      [
+        "processing",
+        "done",
+        "éxito"
+      ],
+      [
+        "processing",
+        "failed",
+        "error reintentable"
+      ],
+      [
+        "failed",
+        "dead",
+        "umbral agotado"
+      ],
+      [
+        "dead",
+        "pending",
+        "replay owner"
+      ]
+    ]
+  },
+  {
+    "kind": "architecture",
+    "file": "architecture",
+    "title": "Arquitectura lógica actual",
+    "groups": [
+      {
+        "name": "Web client",
+        "nodes": [
+          {
+            "id": "browser",
+            "name": "Next.js App Router / PWA",
+            "type": "device"
+          },
+          {
+            "id": "ui",
+            "name": "Dashboard / Caja / Reportes",
+            "type": "component"
+          }
+        ]
+      },
+      {
+        "name": "Vercel",
+        "nodes": [
+          {
+            "id": "api",
+            "name": "Server/API Routes + proxy",
+            "type": "component"
+          },
+          {
+            "id": "worker",
+            "name": "Webhook worker / Cron",
+            "type": "component"
+          }
+        ]
+      },
+      {
+        "name": "Supabase",
+        "nodes": [
+          {
+            "id": "auth",
+            "name": "Supabase Auth",
+            "type": "component"
+          },
+          {
+            "id": "db",
+            "name": "PostgreSQL + RLS",
+            "type": "database"
+          }
+        ]
+      },
+      {
+        "name": "Proveedores",
+        "nodes": [
+          {
+            "id": "mp",
+            "name": "Mercado Pago API/Webhook",
+            "type": "external"
+          },
+          {
+            "id": "uala",
+            "name": "Ualá Bis API/Callback",
+            "type": "external"
+          }
+        ]
+      },
+      {
+        "name": "Push",
+        "nodes": [
+          {
+            "id": "push",
+            "name": "Web Push",
+            "type": "external"
+          }
+        ]
+      }
+    ],
+    "links": [
+      [
+        "browser",
+        "ui",
+        "render"
+      ],
+      [
+        "ui",
+        "api",
+        "HTTPS"
+      ],
+      [
+        "api",
+        "auth",
+        "session"
+      ],
+      [
+        "api",
+        "db",
+        "TLS"
+      ],
+      [
+        "api",
+        "mp",
+        "OAuth/fetch"
+      ],
+      [
+        "mp",
+        "api",
+        "webhook HTTPS"
+      ],
+      [
+        "api",
+        "uala",
+        "fetch order"
+      ],
+      [
+        "uala",
+        "api",
+        "callback"
+      ],
+      [
+        "worker",
+        "db",
+        "claim/ingest"
+      ],
+      [
+        "worker",
+        "push",
+        "push"
+      ]
+    ]
+  },
+  {
+    "kind": "deployment",
+    "file": "deployment",
+    "title": "Despliegue [Inferido] — validar staging",
+    "groups": [
+      {
+        "name": "Cliente",
+        "nodes": [
+          {
+            "id": "browser",
+            "name": "Browser",
+            "type": "user"
+          }
+        ]
+      },
+      {
+        "name": "Vercel",
+        "nodes": [
+          {
+            "id": "app",
+            "name": "Next.js App/API",
+            "type": "component"
+          },
+          {
+            "id": "cron",
+            "name": "Cron worker",
+            "type": "component"
+          }
+        ]
+      },
+      {
+        "name": "Supabase",
+        "nodes": [
+          {
+            "id": "auth",
+            "name": "Auth",
+            "type": "component"
+          },
+          {
+            "id": "db",
+            "name": "PostgreSQL/RLS",
+            "type": "database"
+          }
+        ]
+      },
+      {
+        "name": "Terceros",
+        "nodes": [
+          {
+            "id": "mp",
+            "name": "Mercado Pago",
+            "type": "external"
+          },
+          {
+            "id": "uala",
+            "name": "Ualá Bis",
+            "type": "external"
+          },
+          {
+            "id": "push",
+            "name": "Web Push",
+            "type": "external"
+          }
+        ]
+      }
+    ],
+    "links": [
+      [
+        "browser",
+        "app",
+        "HTTPS"
+      ],
+      [
+        "app",
+        "auth",
+        "API"
+      ],
+      [
+        "app",
+        "db",
+        "TLS"
+      ],
+      [
+        "cron",
+        "app",
+        "Bearer CRON_SECRET"
+      ],
+      [
+        "mp",
+        "app",
+        "webhook"
+      ],
+      [
+        "uala",
+        "app",
+        "callback"
+      ],
+      [
+        "app",
+        "mp",
+        "OAuth/fetch"
+      ],
+      [
+        "app",
+        "uala",
+        "fetch order"
+      ],
+      [
+        "app",
+        "push",
+        "push"
+      ]
+    ]
+  }
+]
