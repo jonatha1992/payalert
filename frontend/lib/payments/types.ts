@@ -64,7 +64,17 @@ export interface ExpectedPayment {
   providerOrderId: string | null;
   checkoutUrl: string | null;
   /** Candidates stored when match decision was MANUAL_REVIEW or SUGGESTED. */
-  match_candidates: { transaction_id: string }[];
+  match_candidates: Array<{
+    transaction_id: string;
+    score?: number;
+    decision?: 'SUGGESTED' | 'MANUAL_REVIEW';
+    amount?: number;
+    currency?: string;
+    reference?: string | null;
+    created_at?: string;
+    expires_at?: string;
+    provider?: string | null;
+  }>;
 }
 
 export interface WebhookRequest {

@@ -1,6 +1,7 @@
 // Server-only module: Supabase implementation of PaymentsRepository.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PaymentAuditEntry, PaymentsRepository, StatusTransitionPolicy, WebhookLogEntry } from '@/lib/payments/ingest';
+import type { MatchEvidence } from '@/lib/payments/matching';
 import { decryptSecret } from '@/lib/payments/secretBox';
 import type {
   ConnectionStatus,
@@ -71,7 +72,17 @@ interface ExpectedRow {
   provider: Provider | null;
   provider_order_id: string | null;
   checkout_url: string | null;
-  match_candidates: { transaction_id: string }[] | null;
+  match_candidates: Array<{
+    transaction_id: string;
+    score?: number;
+    decision?: 'SUGGESTED' | 'MANUAL_REVIEW';
+    amount?: number;
+    currency?: string;
+    reference?: string | null;
+    created_at?: string;
+    expires_at?: string;
+    provider?: string | null;
+  }> | null;
 }
 
 export function toExpectedPayment(row: ExpectedRow): ExpectedPayment {
@@ -220,18 +231,20 @@ export class SupabasePaymentsRepository implements PaymentsRepository {
   }
 
   async listOpenExpectedPayments(businessId: string, storeId?: string | null): Promise<ExpectedPayment[]> {
-      let query = this.db
-        .from('expected_payments')
-        .select('id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url')
-        .eq('business_id', businessId)
-        .eq('status', 'WAITING');
-      if (storeId) query = query.eq('store_id', storeId);
-      const { data, error } = await query.returns<ExpectedRow[]>();
-      if (error) throw error;
-      return (data ?? []).map(toExpectedPayment);
-    }
+    let query = this.db
+      .from('expected_payments')
+      .select('id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url, match_candidates')
+      .eq('business_id', businessId)
+      .eq('status', 'WAITING');
+    if (storeId) query = query.eq('store_id', storeId);
+    const { data, error } = await query.returns<ExpectedRow[]>();
+    if (error) throw error;
+    return (data ?? []).map(toExpectedPayment);
+  }
 
-    async markExpectedPayment(id: string, status: ExpectedPaymentStatus, transactionId: string): Promise<void> {
+  async markExpectedPayment(
+    id: string, status: ExpectedPaymentStatus, transactionId: string, evidence?: MatchEvidence,
+  ): Promise<void> {
       const { data: tx, error: txError } = await this.db
         .from('transactions')
         .select('id, business_id')
@@ -240,10 +253,19 @@ export class SupabasePaymentsRepository implements PaymentsRepository {
       if (txError) throw txError;
 
       const now = new Date().toISOString();
-      const patch =
-        status === 'MATCHED'
-          ? { status, matched_transaction_id: transactionId, matched_at: now }
-          : { status, match_candidates: [{ transaction_id: transactionId }] };
+      const patch = status === 'MATCHED'
+        ? { status, matched_transaction_id: transactionId, matched_at: now, match_score: null, match_candidates: [] }
+        : { status, match_score: evidence?.score ?? null, match_candidates: evidence ? [{
+          transaction_id: transactionId,
+          score: evidence.score,
+          decision: evidence.decision,
+          amount: evidence.amount,
+          currency: evidence.currency,
+          reference: evidence.reference,
+          created_at: evidence.createdAt,
+          expires_at: evidence.expiresAt,
+          provider: evidence.provider,
+        }] : [] };
 
       const { data, error } = await this.db
         .from('expected_payments')

@@ -4,6 +4,17 @@ export interface MatchOptions {
   earlyToleranceMs?: number;
 }
 
+export interface MatchEvidence {
+  decision: 'SUGGESTED' | 'MANUAL_REVIEW';
+  score: number;
+  amount: number;
+  currency: string;
+  reference: string | null;
+  createdAt: string;
+  expiresAt: string;
+  provider: string | null;
+}
+
 export interface MatchCandidate {
   id: string;
   score: number;
@@ -12,7 +23,8 @@ export interface MatchCandidate {
   reference: string | null;
   createdAt: string;
   expiresAt: string;
-  provider: string | null;
+  /** Ranked, privacy-safe evidence from the matching engine. */
+  evidence?: MatchEvidence;
 }
 
 export interface MatchResult {
@@ -48,14 +60,27 @@ export function matchTransaction(
     reference: candidate.reference,
     createdAt: candidate.createdAt,
     expiresAt: candidate.expiresAt,
-    provider: candidate.provider,
+    evidence: undefined,
   }))
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
   const reference = waiting.find((candidate) => candidate.id === tx.externalReference);
   if (reference) return { decision: 'AUTO', expectedPaymentId: reference.id, candidates: scores };
   const eligible = scores.filter((candidate) => candidate.score >= 70);
-  if (eligible.length > 1) return { decision: 'MANUAL_REVIEW', candidates: scores };
+  if (eligible.length > 1) {
+    const evidence = eligible.map((candidate) => ({ ...candidate,
+      evidence: { decision: 'MANUAL_REVIEW' as const, score: candidate.score, amount: candidate.amount,
+        currency: candidate.currency, reference: candidate.reference, createdAt: candidate.createdAt,
+        expiresAt: candidate.expiresAt, provider: waiting.find(item => item.id === candidate.id)?.provider ?? null },
+    }));
+    return { decision: 'MANUAL_REVIEW', candidates: evidence };
+  }
   if (!eligible.length) return { decision: 'NO_MATCH', candidates: scores };
-  return { decision: eligible[0].score >= 90 ? 'AUTO' : 'SUGGESTED',
-    expectedPaymentId: eligible[0].id, candidates: scores };
+  const best = eligible[0];
+  if (best.score >= 90) return { decision: 'AUTO', expectedPaymentId: best.id, candidates: scores };
+  const candidate = waiting.find(item => item.id === best.id)!;
+  const evidence = { decision: 'SUGGESTED' as const, score: best.score, amount: best.amount,
+    currency: best.currency, reference: best.reference, createdAt: best.createdAt,
+    expiresAt: best.expiresAt, provider: candidate.provider };
+  return { decision: 'SUGGESTED', expectedPaymentId: best.id,
+    candidates: scores.map(item => item.id === best.id ? { ...item, evidence } : item) };
 }

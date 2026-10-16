@@ -9,6 +9,7 @@ export async function recordAuditEvent(db: SupabaseClient, event: {
   action: AuditAction;
   entityType: string;
   entityId?: string | null;
+  newData?: Record<string, unknown> | null;
 }): Promise<void> {
   const { error } = await db.from('audit_logs').insert({
     business_id: event.businessId,
@@ -16,7 +17,7 @@ export async function recordAuditEvent(db: SupabaseClient, event: {
     action: event.action,
     entity_type: event.entityType,
     entity_id: event.entityId ?? null,
-    new_data: null,
+    new_data: event.newData ?? null,
   });
   if (error) throw error;
 }

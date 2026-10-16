@@ -19,6 +19,8 @@ interface ExpectedPaymentView {
     expiresAt: string;
     checkoutUrl: string | null;
     matchedAt: string | null;
+    matchScore: number | null;
+    matchCandidates: { transaction_id: string; score?: number; decision?: 'SUGGESTED' | 'MANUAL_REVIEW'; amount?: number; currency?: string; reference?: string | null; created_at?: string; expires_at?: string; provider?: string | null }[];
 }
 
 interface ConnectionView {
@@ -254,6 +256,31 @@ function Terminal({ role, storeId }: { role: 'owner' | 'admin' | 'employee'; sto
         finally { setBusy(false); }
     };
 
+    const resolveCandidate = async (transactionId: string) => {
+        if (!activeCharge || busy) return;
+        setBusy(true);
+        try {
+            const data = await requestJson<{ expectedPayment: ExpectedPaymentView }>(`/api/expected-payments/${encodeURIComponent(activeCharge.id)}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transactionId }),
+            });
+            receiveCharge(data.expectedPayment);
+            toast.success('Pago asignado al cobro.');
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'No pudimos confirmar el pago.'); }
+        finally { setBusy(false); }
+    };
+
+    const dismissCandidate = async (transactionId: string) => {
+        if (!activeCharge || busy) return;
+        setBusy(true);
+        try {
+            await requestJson(`/api/expected-payments/${encodeURIComponent(activeCharge.id)}/candidates`, {
+                method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transactionId }),
+            });
+            await selectCharge(activeCharge.id);
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'No pudimos descartar el candidato.'); }
+        finally { setBusy(false); }
+    };
+
     const selectCharge = async (id: string) => {
         if (busy) return;
         setBusy(true);
@@ -317,7 +344,17 @@ function Terminal({ role, storeId }: { role: 'owner' | 'admin' | 'employee'; sto
                 {activeCharge && <section aria-label="Cobro activo" className={`p-6 rounded-xl border-2 space-y-3 ${statusClass(activeCharge.status)}`}>
                     <h2 role="status" className="text-2xl font-bold">{statusLabels[activeCharge.status]}</h2>
                     <p className="text-4xl font-bold tabular-nums break-words">{money(activeCharge.amount)}</p>
-                    <p className="break-words">{activeCharge.reference || 'Sin referencia'}</p>
+          <p className="break-words">{activeCharge.reference || 'Sin referencia'}</p>
+                    {activeCharge.matchCandidates.length > 0 && activeCharge.status === 'MANUAL_REVIEW' && <div className="space-y-2" aria-label="Candidatos de pago">
+                        <h3 className="font-semibold">Candidatos de pago</h3>
+                        {activeCharge.matchCandidates.map(candidate => <div key={candidate.transaction_id} className="rounded-lg border border-current/20 p-3 space-y-1">
+                            <p className="font-medium">{money(candidate.amount ?? 0)} · {candidate.currency ?? activeCharge.currency}</p>
+                            <p className="text-sm">Ventana: {candidate.created_at ? time(candidate.created_at) : '—'}–{candidate.expires_at ? time(candidate.expires_at) : '—'}</p>
+                            <p className="text-sm">Referencia: {candidate.reference || 'Sin referencia'} · Puntaje: {candidate.score ?? '—'}/100 · {candidate.decision === 'SUGGESTED' ? 'Sugerido' : 'Revisión manual'}</p>
+                            <button disabled={busy} onClick={() => void resolveCandidate(candidate.transaction_id)} className="px-3 py-2 rounded-lg border border-current disabled:opacity-50">Confirmar este pago</button>
+                            <button disabled={busy} onClick={() => void dismissCandidate(candidate.transaction_id)} className="ml-2 px-3 py-2 rounded-lg border border-current disabled:opacity-50">Descartar</button>
+                        </div>)}
+                    </div>}
                     {activeCharge.status === 'MATCHED' && activeCharge.matchedAt && <p className="font-semibold">Confirmado a las {time(activeCharge.matchedAt)}</p>}
                     {activeCharge.status === 'WAITING' && <Countdown key={activeCharge.id} expiresAt={activeCharge.expiresAt} />}
                     {pollError && <p role="alert" className="text-sm">{pollError} Reintentando automáticamente.</p>}

@@ -1,13 +1,13 @@
 // Server-only module: expected payments ("cobros esperados", PRD section 17).
 import { getConnector } from '@/lib/payments/connectors';
-import type { ExpectedPayment, Provider } from '@/lib/payments/types';
+import type { ExpectedPayment, Provider, NormalizedTransaction } from '@/lib/payments/types';
 import { toConnection, toExpectedPayment, CONNECTION_COLUMNS, type ConnectionRow } from '@/lib/server/paymentsRepository';
 import { ScopeError, type ResolvedScope } from '@/lib/server/scope';
 import { getServiceClient } from '@/lib/server/session';
 import { recordAuditEvent } from '@/lib/server/audit';
 
 const COLUMNS =
-  'id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url, matched_transaction_id, match_score, matched_at';
+  'id, business_id, store_id, amount, currency, reference, status, created_at, expires_at, provider, provider_order_id, checkout_url, matched_transaction_id, match_score, matched_at, match_candidates';
 
 export interface CreateExpectedPaymentInput {
   amount: number;
@@ -22,15 +22,20 @@ export interface CreateExpectedPaymentInput {
 export type ExpectedPaymentView = ExpectedPayment & {
   matchedTransactionId: string | null;
   matchedAt: string | null;
+  matchScore: number | null;
+  matchCandidates: ExpectedPayment['match_candidates'];
 };
 
 type Row = Parameters<typeof toExpectedPayment>[0] & {
   matched_transaction_id: string | null;
   matched_at: string | null;
+  match_score: number | null;
 };
 
 function toView(row: Row): ExpectedPaymentView {
-  return { ...toExpectedPayment(row), matchedTransactionId: row.matched_transaction_id, matchedAt: row.matched_at };
+  const expectedPayment = toExpectedPayment(row);
+  return { ...expectedPayment, matchedTransactionId: row.matched_transaction_id, matchedAt: row.matched_at,
+    matchScore: row.match_score, matchCandidates: expectedPayment.match_candidates };
 }
 
 /** Marks WAITING rows past their deadline as EXPIRED (cheap, called on read). */
@@ -147,6 +152,35 @@ export async function createExpectedPayment(
   return toView(created);
 }
 
+export async function dismissExpectedPaymentCandidate(
+  scope: ResolvedScope, userId: string, id: string, transactionId: string,
+): Promise<void> {
+  const db = getServiceClient();
+  const { data: candidate, error } = await db.from('expected_payments')
+    .select('match_candidates').eq('id', id).eq('business_id', scope.businessId)
+    .maybeSingle<{ match_candidates: ExpectedPayment['match_candidates'] }>();
+  if (error) throw error;
+  if (!candidate) throw new ScopeError('El cobro no tiene candidatos para descartar', 400);
+  const matched = candidate.match_candidates.find(item => item.transaction_id === transactionId);
+  if (!matched) throw new ScopeError('El candidato no pertenece a este cobro', 400);
+  const { data: transaction, error: transactionError } = await db.from('transactions')
+    .select('id, amount, currency, metadata').eq('id', transactionId)
+    .eq('business_id', scope.businessId).maybeSingle<{ id: string; amount: number; currency: string; metadata: Record<string, unknown> | null }>();
+  if (transactionError) throw transactionError;
+    if (!transaction) throw new ScopeError('Movimiento no encontrado', 400);
+  const remaining = candidate.match_candidates.filter(item => item.transaction_id !== transactionId);
+  const { data: updated, error: updateError } = await db.from('expected_payments')
+    .update({ match_candidates: remaining, match_score: remaining[0]?.score ?? null,
+      status: remaining.length ? 'MANUAL_REVIEW' : 'WAITING' })
+    .eq('id', id).eq('business_id', scope.businessId).eq('status', 'MANUAL_REVIEW')
+    .contains('match_candidates', [{ transaction_id: transactionId }]).select('id').maybeSingle();
+  if (updateError) throw updateError;
+  if (!updated) throw new ScopeError('El cobro ya fue resuelto', 400);
+  await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'MANUAL_RESOLUTION', entityType: 'expected_payment', entityId: id,
+    newData: { transaction_id: transactionId, resolution: 'candidate_dismissed', amount: transaction.amount,
+      currency: transaction.currency, reference: typeof transaction.metadata?.external_reference === 'string' ? transaction.metadata.external_reference : null } });
+}
+
 /**
  * Manual resolution: cancel, or confirm a MANUAL_REVIEW/WAITING charge against a stored transaction
  * of the same business (PRD: "match manual" is audited).
@@ -169,38 +203,52 @@ export async function updateExpectedPayment(
     if (!['WAITING', 'MANUAL_REVIEW'].includes(current.status)) {
       throw new ScopeError('El cobro ya está resuelto', 400);
     }
-    const { data: tx } = await db
-      .from('transactions')
-      .select('id, provider_status, expected_payment_id, store_id')
+    const { data: tx, error: transactionError } = await db
+        .from('transactions')
+        .select('id, provider_status, expected_payment_id, store_id, amount, currency, occurred_at, metadata, provider')
       .eq('id', action.transactionId)
       .eq('business_id', scope.businessId)
-      .maybeSingle<{ id: string; provider_status: string | null; expected_payment_id: string | null; store_id: string | null }>();
+      .maybeSingle<{ id: string; provider_status: string | null; expected_payment_id: string | null; store_id: string | null; amount: number; currency: string; occurred_at: string; metadata: Record<string, unknown> | null; provider: string | null }>();
+if (transactionError) throw transactionError;
     if (!tx) throw new ScopeError('Movimiento no encontrado', 403);
     if (scope.storeId && tx.store_id !== scope.storeId) throw new ScopeError('Acceso denegado a esta tienda', 403);
     if (tx.provider_status !== 'CONFIRMED') throw new ScopeError('El movimiento no está acreditado', 400);
     if (tx.expected_payment_id && tx.expected_payment_id !== id) {
       throw new ScopeError('Ese movimiento ya está asignado a otro cobro', 400);
     }
-    const { error } = await db
+    const { data: matched, error } = await db
       .from('expected_payments')
-      .update({ status: 'MATCHED', matched_transaction_id: tx.id, matched_at: new Date().toISOString() })
+      .update({ status: 'MATCHED', matched_transaction_id: tx.id, matched_at: new Date().toISOString(), match_score: null, match_candidates: [] })
       .eq('id', id)
-      .eq('business_id', scope.businessId);
+      .eq('business_id', scope.businessId)
+      .in('status', ['WAITING', 'MANUAL_REVIEW'])
+      .select('id')
+      .maybeSingle<{ id: string }>();
     if (error) {
       if (error.code === '23505') throw new ScopeError('Ese movimiento ya está asignado a otro cobro', 400);
       throw error;
     }
-    await db.from('transactions').update({ expected_payment_id: id }).eq('id', tx.id).eq('business_id', scope.businessId);
-    // Other charges waiting on the same transaction go back to WAITING.
-    await db
-      .from('expected_payments')
-      .update({ status: 'WAITING', match_candidates: [] })
+    if (!matched) throw new ScopeError('El cobro ya fue resuelto o el movimiento ya está asignado', 400);
+    const { data: linked, error: linkError } = await db
+      .from('transactions')
+      .update({ expected_payment_id: id })
+      .eq('id', tx.id)
       .eq('business_id', scope.businessId)
-      .eq('status', 'MANUAL_REVIEW')
-      .neq('id', id)
-      .contains('match_candidates', [{ transaction_id: tx.id }]);
+      .is('expected_payment_id', null)
+      .select('id')
+      .maybeSingle<{ id: string }>();
+    if (linkError) throw linkError;
+    if (!linked) {
+      await db.from('expected_payments').update({ status: current.status, matched_transaction_id: null, matched_at: null })
+        .eq('id', id).eq('business_id', scope.businessId).eq('status', 'MATCHED').eq('matched_transaction_id', tx.id);
+      throw new ScopeError('Ese movimiento ya está asignado a otro cobro', 400);
+    }
+    await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'MANUAL_RESOLUTION', entityType: 'expected_payment', entityId: id,
+      newData: { transaction_id: tx.id, resolution: 'matched', amount: tx.amount, currency: tx.currency,
+        reference: typeof tx.metadata?.external_reference === 'string' ? tx.metadata.external_reference : null } });
   }
 
-  await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'MANUAL_RESOLUTION', entityType: 'expected_payment', entityId: id });
+  if (action.type === 'cancel') await recordAuditEvent(db, { businessId: scope.businessId, actorId: userId, action: 'MANUAL_RESOLUTION', entityType: 'expected_payment', entityId: id,
+    newData: { resolution: 'cancelled' } });
   return getExpectedPayment(scope, id);
 }

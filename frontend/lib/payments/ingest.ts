@@ -1,6 +1,6 @@
 import { ProviderError } from './connectors/errors';
 import { asIdentifier, readWebhookBody } from './connectors/payload';
-import { matchTransaction, type MatchResult } from './matching';
+import { matchTransaction, type MatchEvidence, type MatchResult } from './matching';
 import type { ExpectedPayment, ExpectedPaymentStatus, MovementStatus, NormalizedTransaction,
   PaymentConnection, PaymentConnector, Provider, WebhookRequest } from './types';
 
@@ -46,7 +46,7 @@ export interface PaymentsRepository {
   ): Promise<{ id: string; created: boolean; previousStatus: MovementStatus | null }>;
   listOpenExpectedPayments(businessId: string, storeId?: string | null): Promise<ExpectedPayment[]>;
   /** Persist only a WAITING candidate owned by the transaction's business and store. */
-  markExpectedPayment(id: string, status: ExpectedPaymentStatus, transactionId: string): Promise<void>;
+  markExpectedPayment(id: string, status: ExpectedPaymentStatus, transactionId: string, evidence?: MatchEvidence): Promise<void>;
   logWebhook(entry: WebhookLogEntry): Promise<void>;
   audit(entry: PaymentAuditEntry): Promise<void>;
 }
@@ -154,9 +154,8 @@ export async function ingestWebhook({
           if (result.match.decision === 'AUTO' && result.match.expectedPaymentId) {
             await repo.markExpectedPayment(result.match.expectedPaymentId, 'MATCHED', persisted.id);
           } else if (result.match.decision === 'MANUAL_REVIEW' || result.match.decision === 'SUGGESTED') {
-            // Persist candidates for manual resolution (MANUAL_REVIEW) or suggested review (SUGGESTED)
-            for (const candidate of result.match.candidates.filter((candidate) => candidate.score >= 70)) {
-              await repo.markExpectedPayment(candidate.id, 'MANUAL_REVIEW', persisted.id);
+            for (const candidate of result.match.candidates.filter((item) => item.evidence)) {
+              await repo.markExpectedPayment(candidate.id, 'MANUAL_REVIEW', persisted.id, candidate.evidence);
             }
           }
           result.notify = true;
