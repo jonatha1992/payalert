@@ -56,8 +56,8 @@ ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS connection_id UUID
 --   WHERE external_id IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;
 -- Full (non-partial) index so PostgREST upserts can target it with on_conflict=provider,external_id.
 -- NULLs never collide, so manual expenses without provider are unaffected.
-DROP INDEX IF EXISTS public.uq_transactions_provider_external;
-CREATE UNIQUE INDEX uq_transactions_provider_external
+-- Keep the existing unique index on re-run; dropping it creates an unsafe ingestion window.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_provider_external
     ON public.transactions(provider, external_id);
 
 -- 3. EXPECTED PAYMENTS --------------------------------------------------------
@@ -100,14 +100,22 @@ ALTER TABLE public.expected_payments ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "expected_payments_owner_all" ON public.expected_payments;
 CREATE POLICY "expected_payments_owner_all" ON public.expected_payments
-    FOR SELECT USING (get_my_role() = 'owner' AND business_id = get_my_business_id());
+    FOR SELECT USING (
+        business_id IN (
+            SELECT business_id FROM public.users WHERE id = auth.uid() AND role = 'owner'
+        )
+    );
 
 DROP POLICY IF EXISTS "expected_payments_employee_store" ON public.expected_payments;
 CREATE POLICY "expected_payments_employee_store" ON public.expected_payments
     FOR SELECT USING (
-        get_my_role() = 'employee'
-        AND business_id = get_my_business_id()
-        AND store_id = get_my_assigned_store_id()
+        EXISTS (
+            SELECT 1 FROM public.users u
+            WHERE u.id = auth.uid()
+              AND u.role = 'employee'
+              AND u.business_id = expected_payments.business_id
+              AND u.assigned_store_id = expected_payments.store_id
+        )
     );
 -- Writes go through /api/expected-payments (service role, scope resolved from the session).
 
@@ -132,7 +140,11 @@ CREATE INDEX IF NOT EXISTS idx_webhook_logs_business ON public.webhook_logs(busi
 
 DROP POLICY IF EXISTS "webhook_logs_owner_access" ON public.webhook_logs;
 CREATE POLICY "webhook_logs_owner_access" ON public.webhook_logs
-    FOR SELECT USING (get_my_role() = 'owner' AND business_id = get_my_business_id());
+    FOR SELECT USING (
+        business_id IN (
+            SELECT business_id FROM public.users WHERE id = auth.uid() AND role = 'owner'
+        )
+    );
 
 -- 5. LEGACY PAYMENT TOKENS ----------------------------------------------------
 -- Secrets must not be readable from the browser. The dashboard now uses /api/integrations.

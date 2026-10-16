@@ -2,8 +2,7 @@
 -- Created: 2026-09-27 (P0)
 -- Idempotent: re-running is safe
 
--- Enable uuid extension if not already
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- UUID values are supplied by auth.users; this table needs no uuid extension.
 
 -- Main table: one row per user per business
 CREATE TABLE IF NOT EXISTS user_notification_preferences (
@@ -19,12 +18,15 @@ CREATE TABLE IF NOT EXISTS user_notification_preferences (
 -- RLS: users only see their own preferences
 ALTER TABLE user_notification_preferences ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users read own prefs" ON user_notification_preferences;
 CREATE POLICY "Users read own prefs" ON user_notification_preferences
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users insert own prefs" ON user_notification_preferences;
 CREATE POLICY "Users insert own prefs" ON user_notification_preferences
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users update own prefs" ON user_notification_preferences;
 CREATE POLICY "Users update own prefs" ON user_notification_preferences
   FOR UPDATE USING (auth.uid() = user_id);
 
