@@ -11,7 +11,8 @@ if (!url || !serviceKey || !key) {
 }
 
 import { createCipheriv, randomBytes } from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'node:module';
+const { createClient } = createRequire(new URL('../frontend/package.json', import.meta.url))('@supabase/supabase-js');
 import { migratePaymentTokens } from './payment-token-migration.mjs';
 
 
