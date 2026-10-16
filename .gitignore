@@ -1,0 +1,4 @@
+
+# secretos locales
+/.env
+/supabase/.temp/
