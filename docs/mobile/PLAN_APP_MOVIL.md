@@ -1,6 +1,6 @@
 # PAY-20 — Plan de app móvil
 
-**Estado:** planificación; la app no existe todavía. Secuenciar después de estabilizar el MVP web. Decisión de producto: mantener versión web y sumar app móvil, porque las alertas de pagos tienen que llegar al celular.
+**Estado:** F0a completado el 2026-10-16: `getSessionProfile()` valida `Authorization: Bearer` mediante Supabase Auth, carga el mismo perfil server-side y conserva el camino de cookies. Commit: `e138aa4aaca8b758d1fde449aa864c4c2d0b4d94` (`PAY-20 feat(auth): accept Supabase bearer token for mobile clients`). `proxy.ts`, `AuthProvider.tsx`, `app/login/page.tsx` y `app/admin/businesses/new/page.tsx` siguen usando cookies/Supabase del frontend web; el bearer autenticado en header no depende de CSRF por cookie. La app móvil no existe todavía.
 
 ## 1. Objetivo y alcance
 
