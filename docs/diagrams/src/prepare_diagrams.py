@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-p=Path('docs/analisis/diagrams.json')
+p=Path('docs/diagrams/src/diagrams.json')
 a=json.loads(p.read_text(encoding='utf-8'))
 # Keep shared source but assign unique draw.io output names for repeated kinds.
 for i,x in enumerate(a):

@@ -19,7 +19,7 @@ Los diagramas son vistas de código y fuentes del repo, no diseño aprobado. Se 
 
 ## Validación visual y limitaciones
 
-- El generador produjo PNG para los archivos catalogados; el spec técnico está en `diagrams.json`, el ejemplo neutro en `diagram-neutral.json`.
+- El generador produjo PNG para los archivos catalogados; el spec técnico está en [`../diagrams/src/diagrams.json`](../diagrams/src/diagrams.json); `diagram-neutral.json` fue retirado.
 - Inspección visual: contexto, activity, UC PN1–PN6, secuencia CU-03, clases, arquitectura y despliegue. Se observan cruces/clutter en activity, UC PN1/PN3/PN6, clase y arquitectura/despliegue; deben corregirse antes de considerarlos visualmente aprobados. Secuencia CU-03 legible. La imagen ER se generó tras corregir el DDL vacío inicial; revisión visual independiente del resultado actual queda pendiente.
 - Las otras secuencias y estados tienen PNG pero no se inspeccionaron individualmente; quedan [Pendiente] inspección y ajuste. PNG generado no significa diagrama aceptado.
 - Las colisiones de `kind` se resolvieron con nombres explícitos por PN/CU/estado.
