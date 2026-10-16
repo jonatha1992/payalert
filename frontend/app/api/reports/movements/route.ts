@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
-import { assertStoreInBusiness, getServiceClient, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
+import { localDateBoundaryUtc } from '@/lib/reports/dateRange';
+import {
+  assertStoreInBusiness, getServiceClient, getSessionProfile, scopeErrorResponse,
+} from '@/lib/server/session';
 import { parseReportQuery } from '@/lib/reports/query';
 
 const COLUMNS = 'id, type, amount, description, category, store_id, created_at, status, provider, currency, connection_id, stores (name)';
@@ -24,8 +27,8 @@ export async function GET(request: NextRequest) {
 
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    if (startDate) query = query.gte('created_at', `${startDate}T00:00:00`);
-    if (endDate) query = query.lte('created_at', `${endDate}T23:59:59`);
+    if (startDate) query = query.gte('created_at', localDateBoundaryUtc(startDate));
+    if (endDate) query = query.lt('created_at', localDateBoundaryUtc(endDate, true));
     if (scope.storeId) query = query.eq('store_id', scope.storeId);
     if (filters.search) query = query.or(`description.ilike.%${filters.search}%,category.ilike.%${filters.search}%`);
     if (filters.minAmount !== undefined) query = query.gte('amount', filters.minAmount);
@@ -36,8 +39,13 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('type') && searchParams.get('type') !== 'all') query = query.eq('type', searchParams.get('type'));
     if (searchParams.get('category')) query = query.eq('category', searchParams.get('category'));
 
-    const exportCsv = searchParams.get('format') === 'csv';
-    if (!exportCsv) {
+    const exportFormat = searchParams.get('format');
+    const exportCsv = exportFormat === 'csv';
+    const exportExcel = exportFormat === 'xlsx';
+    if (exportFormat && !exportCsv && !exportExcel) {
+      return NextResponse.json({ error: 'Formato de exportación inválido' }, { status: 400 });
+    }
+    if (!exportCsv && !exportExcel) {
       const from = (filters.page - 1) * filters.pageSize;
       query = query.range(from, from + filters.pageSize - 1);
     }
@@ -46,10 +54,11 @@ export async function GET(request: NextRequest) {
       console.error('[Reports API] Error fetching transactions:', error);
       return NextResponse.json({ error: 'Error al obtener transacciones' }, { status: 500 });
     }
+    if (exportExcel) return createExcelResponse(data ?? []);
     if (exportCsv) {
-      const columns = ['id', 'created_at', 'type', 'amount', 'currency', 'status', 'provider', 'connection_id', 'category', 'description', 'store_id'];
-      const csv = [columns.join(','), ...(data ?? []).map((row) => columns.map((key) => csvCell(row[key as keyof typeof row])).join(','))].join('\r\n');
-      return new NextResponse(csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="movimientos.csv"' } });
+      const columns = ["id", "created_at", "type", "amount", "currency", "status", "provider", "connection_id", "category", "description", "store_id"] as const;
+      const csv = [columns.join(","), ...(data ?? []).map((row) => columns.map((key) => csvCell(row[key])).join(","))].join(String.fromCharCode(13, 10));
+      return new NextResponse(String.fromCharCode(0xFEFF) + csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=movimientos.csv" } });
     }
     return NextResponse.json({ transactions: data ?? [], pagination: { page: filters.page, pageSize: filters.pageSize, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / filters.pageSize) } });
   } catch (error) {
@@ -61,6 +70,16 @@ export async function GET(request: NextRequest) {
     console.error('[Reports API] Error:', error);
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
+}
+
+async function createExcelResponse(rows: Record<string, unknown>[]) {
+  const columns = ["id", "created_at", "type", "amount", "currency", "status", "provider", "connection_id", "category", "description", "store_id"] as const;
+  const XLSX = await import("xlsx");
+  const worksheet = XLSX.utils.json_to_sheet(rows.map((row) => Object.fromEntries(columns.map((key) => [key, row[key] ?? ""]))));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Movimientos");
+  const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  return new NextResponse(new Uint8Array(bytes), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": "attachment; filename=movimientos.xlsx" } });
 }
 
 function csvCell(value: unknown): string {

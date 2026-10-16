@@ -68,5 +68,14 @@ export function useReportMovements(businessId?: string) {
     window.location.assign(`/api/reports/movements?${params}`);
   }, [businessId, filters, searchDraft]);
 
-  return { filters, setFilters, searchDraft, setSearchDraft, data, loading, load, exportCsv };
+  const exportExcel = useCallback(() => {
+    if (!businessId) return;
+    const params = new URLSearchParams({ businessId, format: 'xlsx' });
+    for (const [key, value] of Object.entries({ ...filters, search: searchDraft })) {
+      if (value !== '' && value !== 'all' && value !== undefined) params.set(key, String(value));
+    }
+    window.location.assign(`/api/reports/movements?${params}`);
+  }, [businessId, filters, searchDraft]);
+
+  return { filters, setFilters, searchDraft, setSearchDraft, data, loading, load, exportCsv, exportExcel };
 }

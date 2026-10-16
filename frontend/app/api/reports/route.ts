@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server/rbac';
 import { resolveScope } from '@/lib/server/scope';
+import { localDateBoundaryUtc, localDateKey } from '@/lib/reports/dateRange';
 import {
-  assertStoreInBusiness,
-  getServiceClient,
-  getSessionProfile,
-  scopeErrorResponse,
+  assertStoreInBusiness, getServiceClient, getSessionProfile, scopeErrorResponse,
 } from '@/lib/server/session';
 
 interface ReportFilters {
@@ -83,8 +81,8 @@ export async function GET(request: NextRequest) {
         stores (name)
       `)
       .eq('business_id', filters.businessId)
-      .gte('created_at', `${filters.startDate}T00:00:00`)
-      .lte('created_at', `${filters.endDate}T23:59:59`)
+      .gte('created_at', localDateBoundaryUtc(filters.startDate))
+      .lt('created_at', localDateBoundaryUtc(filters.endDate, true))
       .order('created_at', { ascending: false });
 
     // Aplicar filtros opcionales
@@ -212,7 +210,7 @@ function groupByDay(transactions: TransactionRecord[]): GroupedData[] {
   const groups = new Map<string, { income: number; expenses: number; count: number }>();
 
   transactions.forEach((t) => {
-    const date = t.created_at.split('T')[0];
+    const date = localDateKey(t.created_at);
     const existing = groups.get(date) || { income: 0, expenses: 0, count: 0 };
     
     if (t.type === 'income') {

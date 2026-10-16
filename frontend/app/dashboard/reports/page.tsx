@@ -108,7 +108,7 @@ interface ReportData {
 
 export default function ReportsPage() {
   const { profile } = useAuth();
-  const { filters: movementFilters, setFilters: setMovementFilters, searchDraft, setSearchDraft, data: movementData, loading: movementsLoading, load: loadMovements, exportCsv } = useReportMovements(profile?.business_id);
+  const { filters: movementFilters, setFilters: setMovementFilters, searchDraft, setSearchDraft, data: movementData, loading: movementsLoading, load: loadMovements, exportCsv, exportExcel } = useReportMovements(profile?.business_id);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -216,6 +216,14 @@ export default function ReportsPage() {
           >
             <Download size={18} />
             <span>Exportar CSV</span>
+          </button>
+          <button
+            onClick={exportExcel}
+            disabled={!movementData || movementsLoading}
+            className="flex items-center space-x-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors"
+          >
+            <Download size={18} />
+            <span>Exportar Excel</span>
           </button>
         </div>
       </div>
