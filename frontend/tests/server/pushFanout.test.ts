@@ -1,0 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ tables: {} as Record<string, any>, send: vi.fn(), fetch: vi.fn(), log: vi.fn() }));
+vi.mock('web-push', () => ({ default: { setVapidDetails: vi.fn(), sendNotification: mocks.send } }));
+vi.mock('@/lib/server/session', () => ({ getServiceClient: () => ({ from: (name: string) => mocks.tables[name] }) }));
+vi.mock('@/lib/server/structuredLog', () => ({ logStructured: mocks.log }));
+import { sendPushToBusiness } from '@/lib/server/push';
+function query(data: any[]) { const q: any={}; for (const m of ['select','eq','in','is','update']) q[m]=vi.fn(()=>q); q.then=(resolve: any)=>Promise.resolve({data,error:null}).then(resolve); return q; }
+const users=[{id:'u1',role:'owner',assigned_store_id:null}];
+function setup(pref=true, tokens=[{id:'t1',expo_push_token:'ExponentPushToken[private]' }]) { mocks.tables.users=query(users); mocks.tables.user_notification_preferences=query(pref?[{user_id:'u1',push_enabled:true}]:[{user_id:'u1',push_enabled:false}]); mocks.tables.push_subscriptions=query([{endpoint:'https://push.test/endpoint',p256dh:'p',auth:'a'}]); mocks.tables.device_push_tokens=query(tokens); }
+beforeEach(()=>{vi.clearAllMocks(); process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY='public'; process.env.VAPID_PRIVATE_KEY='private'; mocks.send.mockResolvedValue(undefined); mocks.fetch.mockReset().mockResolvedValue({ok:true,json:async()=>({data:[{status:'ok'}]})}); vi.stubGlobal('fetch',mocks.fetch); setup();});
+describe('push fanout',()=>{
+ it('sends generic content to web and Expo without sensitive fields',async()=>{ const result=await sendPushToBusiness({businessId:'b1'},{title:'Nuevo pago recibido',body:'Hay una novedad',data:{eventId:'opaque-1'}}); expect(result).toEqual({sent:2,failed:0,total:2}); expect(mocks.send).toHaveBeenCalledOnce(); expect(JSON.parse(mocks.fetch.mock.calls[0][1].body)[0]).toMatchObject({title:'Nuevo pago recibido',body:'Hay una novedad',data:{eventId:'opaque-1'}}); expect(JSON.stringify(mocks.fetch.mock.calls)).not.toMatch(/amount|payer|email|bank/i); });
+ it('does not deliver when push preference is disabled',async()=>{setup(false); await sendPushToBusiness({businessId:'b1'},{title:'T',body:'B'}); expect(mocks.send).not.toHaveBeenCalled(); expect(mocks.fetch).not.toHaveBeenCalled();});
+ it('revokes Expo token on DeviceNotRegistered',async()=>{mocks.fetch.mockResolvedValue({ok:true,json:async()=>({data:[{status:'error',details:{error:'DeviceNotRegistered'}}]})}); await sendPushToBusiness({businessId:'b1'},{title:'T',body:'B'}); expect(mocks.tables.device_push_tokens.update).toHaveBeenCalledWith(expect.objectContaining({revoked_at:expect.any(String)}));});
+ it('sends Expo messages in batches no larger than 100',async()=>{ const tokens=Array.from({length:201},(_,i)=>({id:String(i),expo_push_token:`ExponentPushToken[${i}]} `})); setup(true,tokens); mocks.fetch.mockImplementation(async(_url:string,init:any)=>({ok:true,json:async()=>({data:JSON.parse(init.body).map(()=>({status:'ok'}))})})); const result=await sendPushToBusiness({businessId:'b1'},{title:'T',body:'B'}); expect(mocks.fetch).toHaveBeenCalledTimes(3); expect(mocks.fetch.mock.calls.map((c:any)=>JSON.parse(c[1].body).length)).toEqual([100,100,1]); expect(result.total).toBe(202);});
+});
