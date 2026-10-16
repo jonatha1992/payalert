@@ -9,6 +9,7 @@ import { resolveScope } from '@/lib/server/scope';
 import { assertStoreInBusiness, getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { apiRateLimiter } from '@/lib/security/rateLimiter';
+import { getClientIP } from '@/lib/security/withRateLimit';
 
 async function listExpectedPaymentsHandler(request: NextRequest) {
   try {
@@ -44,5 +45,5 @@ async function createExpectedPaymentHandler(request: NextRequest) {
   }
 }
 
-export const GET = withRateLimit(listExpectedPaymentsHandler, { limiter: apiRateLimiter });
-export const POST = withRateLimit(createExpectedPaymentHandler, { limiter: apiRateLimiter });
+export const GET = withRateLimit(listExpectedPaymentsHandler, { limiter: apiRateLimiter, key: (request) => `api:expected-payments:${getClientIP(request)}` });
+export const POST = withRateLimit(createExpectedPaymentHandler, { limiter: apiRateLimiter, key: (request) => `api:expected-payments:${getClientIP(request)}` });

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { handleProviderWebhook } from '@/lib/server/webhookHandler';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { webhookRateLimiter } from '@/lib/security/rateLimiter';
+import { getClientIP } from '@/lib/security/withRateLimit';
 
 // Mercado Pago payment notifications. Tenant: payment_connections.provider_account_id = body.user_id; x-signature required. See docs/providers/mercadopago.md.
 // Amount and status always come from the provider API, never from the webhook body.
@@ -17,7 +18,7 @@ async function mercadoPagoWebhookHandler(request: NextRequest) {
 
 export const POST = withRateLimit(mercadoPagoWebhookHandler, {
   limiter: webhookRateLimiter,
-  getIdentifier: (req) => req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown',
+  key: (req) => `mercado_pago:${getClientIP(req)}`,
 });
 
 export async function GET() {

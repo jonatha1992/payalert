@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { handleProviderWebhook } from '@/lib/server/webhookHandler';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { webhookRateLimiter } from '@/lib/security/rateLimiter';
+import { getClientIP } from '@/lib/security/withRateLimit';
 
 // Ualá Bis v2 order notifications (unsigned). Tenant: the order uuid must belong to an expected payment we created. See docs/providers/uala.md.
 // Amount and status always come from the provider API, never from the webhook body.
@@ -17,7 +18,7 @@ async function ualaWebhookHandler(request: NextRequest) {
 
 export const POST = withRateLimit(ualaWebhookHandler, {
   limiter: webhookRateLimiter,
-  getIdentifier: (req) => req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown',
+  key: (req) => `uala:${getClientIP(req)}`,
 });
 
 export async function GET() {

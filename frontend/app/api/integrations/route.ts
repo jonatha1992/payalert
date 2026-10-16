@@ -5,6 +5,7 @@ import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { apiRateLimiter } from '@/lib/security/rateLimiter';
+import { getClientIP } from '@/lib/security/withRateLimit';
 
 async function listIntegrationsHandler(request: NextRequest) {
   try {
@@ -34,5 +35,5 @@ async function createIntegrationHandler(request: NextRequest) {
   }
 }
 
-export const GET = withRateLimit(listIntegrationsHandler, { limiter: apiRateLimiter });
-export const POST = withRateLimit(createIntegrationHandler, { limiter: apiRateLimiter });
+export const GET = withRateLimit(listIntegrationsHandler, { limiter: apiRateLimiter, key: (request) => `api:integrations:${getClientIP(request)}` });
+export const POST = withRateLimit(createIntegrationHandler, { limiter: apiRateLimiter, key: (request) => `api:integrations:${getClientIP(request)}` });

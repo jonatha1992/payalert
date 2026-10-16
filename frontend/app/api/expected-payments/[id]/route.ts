@@ -5,6 +5,7 @@ import { resolveScope } from '@/lib/server/scope';
 import { getSessionProfile, scopeErrorResponse } from '@/lib/server/session';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { apiRateLimiter } from '@/lib/security/rateLimiter';
+import { getClientIP } from '@/lib/security/withRateLimit';
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -39,5 +40,5 @@ async function updateExpectedPaymentHandler(request: NextRequest, context: Conte
   }
 }
 
-export const GET = withRateLimit(getExpectedPaymentHandler, { limiter: apiRateLimiter });
-export const PATCH = withRateLimit(updateExpectedPaymentHandler, { limiter: apiRateLimiter });
+export const GET = withRateLimit(getExpectedPaymentHandler, { limiter: apiRateLimiter, key: (request) => `api:expected-payments:${getClientIP(request)}` });
+export const PATCH = withRateLimit(updateExpectedPaymentHandler, { limiter: apiRateLimiter, key: (request) => `api:expected-payments:${getClientIP(request)}` });
