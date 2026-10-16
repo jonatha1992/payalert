@@ -22,9 +22,6 @@ export function parseWebhookPayload(rawBody: string): unknown {
   try { return JSON.parse(rawBody); } catch { return rawBody; }
 }
 
-const currency = (amount: number, code: string) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: code || 'ARS' }).format(amount);
-
 /** Executes the authoritative provider lookup and idempotent payment ingestion. */
 export async function processWebhook(
   provider: Provider,
@@ -42,10 +39,8 @@ export async function processWebhook(
       const n = result.notification;
       try {
         await sendPushToBusiness({ businessId: data.business_id, storeId: n.storeId }, {
-          title: result.match?.decision === 'AUTO' ? 'Cobro confirmado' : 'Pago acreditado',
-          body: `${currency(n.amount, n.currency)} · ${new Date(n.occurredAt).toLocaleTimeString('es-AR', {
-            hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires',
-          })}`,
+          title: 'Nuevo pago recibido',
+          body: 'Hay una novedad en tus cobros.',
           tag: `payment-${result.transactionId}`,
           data: { transactionId: result.transactionId, url: '/dashboard/terminal' },
         });
