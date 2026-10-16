@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authorizeCron } from '@/app/api/internal/webhook-worker/route';
+import { authorizeCron } from '@/lib/server/cronAuth';
 
 describe('cron authorization', () => {
   it('returns unavailable when secret is missing', () => expect(authorizeCron('Bearer token', undefined)).toBe(503));

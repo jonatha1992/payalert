@@ -1,16 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { WebhookQueue } from '@/lib/server/webhookQueue';
 import { processBatch } from '@/lib/server/webhookWorker';
 import { getServiceClient } from '@/lib/server/session';
-
-export function authorizeCron(provided: string | null, secret: string | undefined): 200 | 401 | 503 {
-  if (!secret) return 503;
-  if (!provided?.startsWith('Bearer ')) return 401;
-  const token = Buffer.from(provided.slice(7));
-  const expected = Buffer.from(secret);
-  return token.length === expected.length && timingSafeEqual(token, expected) ? 200 : 401;
-}
+import { authorizeCron } from '@/lib/server/cronAuth';
 
 async function handler(request: NextRequest) {
   const status = authorizeCron(request.headers.get('authorization'), process.env.CRON_SECRET);
