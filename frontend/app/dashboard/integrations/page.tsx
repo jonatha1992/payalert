@@ -24,6 +24,7 @@ interface ConnectionView {
   status: string;
   hasWebhookSecret: boolean;
   lastSyncAt: string | null;
+  lastSyncSource: string | null;
   lastError: string | null;
 }
 
@@ -62,6 +63,7 @@ export default function IntegrationsPage() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [healthCheckId, setHealthCheckId] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<
@@ -219,13 +221,29 @@ export default function IntegrationsPage() {
     }
   };
 
-  const time = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleTimeString("es-AR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Argentina/Buenos_Aires",
-    });
+  const time = (iso: string) => new Date(iso).toLocaleTimeString("es-AR", {
+    hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires",
+  });
+  const relativeTime = (iso: string | null) => {
+    if (!iso) return "sin consultas registradas";
+    const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+    if (minutes < 1) return "hace menos de un minuto";
+    if (minutes < 60) return `hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    return hours < 24 ? `hace ${hours} h` : `hace ${Math.floor(hours / 24)} días`;
+  };
+  const syncNow = async (id: string) => {
+    setSyncingId(id);
+    try {
+      const response = await fetch(`/api/integrations/${encodeURIComponent(id)}/sync`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pudimos sincronizar la integración.");
+      setConnections(previous => previous.map(connection => connection.id === id
+        ? { ...connection, lastSyncAt: data.lastSyncAt, lastSyncSource: data.source } : connection));
+      toast.success(`Consulta finalizada: ${data.newlyProcessed} pago${data.newlyProcessed === 1 ? " nuevo" : "s nuevos"}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos sincronizar. Probá de nuevo más tarde.");
+    } finally { setSyncingId(null); }
   };
 
   return (
@@ -332,6 +350,9 @@ export default function IntegrationsPage() {
                         última verificación: {time(connection.lastSyncAt)}
                       </span>
                     )}
+                    <span className="text-gray-400 dark:text-gray-500">
+                      Última consulta: {relativeTime(connection.lastSyncAt)}{connection.lastSyncSource ? ` · ${connection.lastSyncSource}` : ""}
+                    </span>
                     {connection.lastError && (
                       <span
                         className="text-amber-700 dark:text-amber-400"
@@ -342,7 +363,14 @@ export default function IntegrationsPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <button
+                    onClick={() => void syncNow(connection.id)}
+                    disabled={syncingId !== null || connection.status === "DISCONNECTED" || connection.provider === "mock"}
+                    className="px-3 py-2 text-xs border border-current rounded-lg disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
+                    {syncingId === connection.id ? "Sincronizando..." : "Sincronizar ahora"}
+                  </button>
                   <button
                     onClick={() => void checkHealth(connection.id)}
                     disabled={

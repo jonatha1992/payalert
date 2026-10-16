@@ -27,6 +27,7 @@ export interface ConnectionView {
   status: string;
   hasWebhookSecret: boolean;
   lastSyncAt: string | null;
+  lastSyncSource: string | null;
   lastError: string | null;
   createdAt: string;
 }
@@ -83,7 +84,7 @@ export async function listConnections(
   const { data, error } = await getServiceClient()
     .from("payment_connections")
     .select(
-      "id, provider, store_id, label, provider_account_id, status, webhook_secret_encrypted, last_sync_at, last_error, created_at, store:stores(name)",
+      "id, provider, store_id, label, provider_account_id, status, webhook_secret_encrypted, last_sync_at, last_sync_source, last_error, created_at, store:stores(name)",
     )
     .eq("business_id", businessId)
     .neq("status", "DISCONNECTED")
@@ -99,6 +100,7 @@ export async function listConnections(
     status: row.status,
     hasWebhookSecret: Boolean(row.webhook_secret_encrypted),
     lastSyncAt: row.last_sync_at,
+    lastSyncSource: row.last_sync_source ?? null,
     lastError: row.last_error,
     createdAt: row.created_at,
   }));

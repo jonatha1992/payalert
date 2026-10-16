@@ -126,6 +126,8 @@ export interface PaymentConnector {
   parseWebhook(request: WebhookRequest, connection: PaymentConnection | null): WebhookParseResult;
   /** Fetch the authoritative movement from the provider API. */
   fetchTransaction(connection: PaymentConnection, externalId: string): Promise<NormalizedTransaction>;
+  /** Optional: list a bounded window of recent provider-authoritative payments. */
+  listRecentTransactions?(connection: PaymentConnection): Promise<NormalizedTransaction[]>;
   /** Optional: create a provider-side charge (checkout link / QR) for an expected payment. */
   createCharge?(connection: PaymentConnection, input: CreateChargeInput): Promise<CreateChargeResult>;
   healthCheck(connection: PaymentConnection): Promise<{ ok: boolean; detail?: string }>;

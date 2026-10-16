@@ -15,7 +15,8 @@ export class UalaConnector implements PaymentConnector {
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
-  parseWebhook(request: WebhookRequest, _connection: PaymentConnection | null): WebhookParseResult {
+  parseWebhook(request: WebhookRequest, connection: PaymentConnection | null): WebhookParseResult {
+    void connection;
     const externalId = asIdentifier(readWebhookBody(request)?.uuid);
     if (!externalId) return { kind: 'rejected', reason: 'missing_uuid' };
     return { kind: 'accepted', externalId, providerOrderId: externalId,
@@ -43,6 +44,22 @@ export class UalaConnector implements PaymentConnector {
     });
     if (!response.ok) throw new ProviderError(this.provider, response.status);
     return normalizeUalaOrder(await response.json());
+  }
+
+  /** Uses the provider-documented order listing endpoint with bounded pagination. */
+  async listRecentTransactions(connection: PaymentConnection) {
+    const token = await this.token(connection);
+    const toDate = new Date();
+    const fromDate = new Date(toDate.getTime() - 24 * 60 * 60_000);
+    const params = new URLSearchParams({ limit: '100', fromDate: fromDate.toISOString(), toDate: toDate.toISOString() });
+    const response = await this.fetchImpl(`${bases(connection).checkout}/orders?${params}`, {
+      method: 'GET', headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new ProviderError(this.provider, response.status);
+    const data: unknown = await response.json();
+    const orders = Array.isArray(data) ? data : asRecord(data)?.orders;
+    if (!Array.isArray(orders)) throw new Error('uala_order_search_invalid_response');
+    return orders.map(normalizeUalaOrder);
   }
 
   async createCharge(connection: PaymentConnection, input: CreateChargeInput): Promise<CreateChargeResult> {

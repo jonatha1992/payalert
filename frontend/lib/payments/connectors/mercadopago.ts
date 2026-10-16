@@ -33,6 +33,21 @@ export class MercadoPagoConnector implements PaymentConnector {
     return normalizeMercadoPagoPayment(await response.json());
   }
 
+  /** Uses the documented payment search endpoint; bounded to 24 hours and 100 results. */
+  async listRecentTransactions(connection: PaymentConnection) {
+    const end = new Date();
+    const start = new Date(end.getTime() - 24 * 60 * 60_000);
+    const params = new URLSearchParams({ sort: 'date_created', criteria: 'desc', range: 'date_created',
+      begin_date: start.toISOString(), end_date: end.toISOString(), limit: '100' });
+    const response = await this.fetchImpl(`https://api.mercadopago.com/v1/payments/search?${params}`, {
+      method: 'GET', headers: { Authorization: `Bearer ${connection.credentials.access_token}` },
+    });
+    if (!response.ok) throw new ProviderError(this.provider, response.status);
+    const data = await response.json() as { results?: unknown };
+    if (!Array.isArray(data.results)) throw new Error('mercado_pago_search_invalid_response');
+    return data.results.map(normalizeMercadoPagoPayment);
+  }
+
   async healthCheck(connection: PaymentConnection): Promise<{ ok: boolean; detail?: string }> {
     try {
       const response = await this.fetchImpl('https://api.mercadopago.com/users/me', {
