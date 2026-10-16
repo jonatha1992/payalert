@@ -2,3 +2,5 @@
 # secretos locales
 /.env
 /supabase/.temp/
+
+.vercel
