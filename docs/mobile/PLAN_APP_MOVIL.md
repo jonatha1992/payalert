@@ -1,6 +1,6 @@
 # PAY-20 — Plan de app móvil
 
-**Estado:** F1 completado el 2026-10-16: app Expo SDK 58 Android en `mobile/`, login Supabase con SecureStore, API tipada con Bearer y pantallas Inicio/Notificaciones; pruebas API/push y bundle Android verificados. No hay selector empresarial: `users.business_id` es único por usuario. Distribución actual: APK development/preview instalada directamente vía EAS Build o build local; publicación en tienda es fase futura, no ahora. `com.tecnofusion.payalert` es inferido y requiere confirmar titularidad antes de publicar. Expo version: `58.0.12`; no verificado en teléfono físico. Commits: pendiente de ejecución.
+**Estado:** F1 completado el 2026-10-16: app Expo SDK 58 Android en `mobile/`, login Supabase con SecureStore, API tipada con Bearer y pantallas Inicio/Notificaciones; pruebas API/push y bundle Android verificados. No hay selector empresarial: `users.business_id` es único por usuario. Distribución actual: APK development/preview instalada directamente vía EAS Build o build local; publicación en tienda es fase futura, no ahora. `com.tecnofusion.payalert` es inferido y requiere confirmar titularidad antes de publicar. Expo version: `58.0.12`; no verificado en teléfono físico. Commits: `399cb907a25bff6f26a94e2bf4e48db9ec975a80` (app) y `c8592038ed5b8abc32c1ffe53b6235b662212244` (plan).
 
 
 ## 1. Objetivo y alcance
