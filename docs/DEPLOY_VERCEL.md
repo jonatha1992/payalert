@@ -37,6 +37,10 @@ No copiar valores de ejemplo al proyecto. La guía anterior contenía valores VA
 Las credenciales y secretos de Mercado Pago/Ualá se configuran por conexión autenticada en Integraciones y se guardan cifrados; no configurar `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` ni `UALA_WEBHOOK_SECRET` como variables globales de entorno. Ualá Bis v2 no firma webhooks; ver `docs/providers/uala.md`.
 
 
+## Autenticación con Google
+
+Sigue [docs/GOOGLE_AUTH.md](./GOOGLE_AUTH.md) para crear el OAuth client, añadir la URI callback de Supabase, activar Google y configurar `Site URL`/redirect URLs. El registro inicial crea un negocio por usuario. Por defecto el alta es abierta; configura `ALLOWED_SIGNUP_EMAILS` como lista separada por comas para restringirla.
+
 ## Paso 2: Configurar Webhooks en Mercado Pago
 
 1. Ve a https://www.mercadopago.com.ar/developers/panel/applications
