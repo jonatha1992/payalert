@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Bell, DollarSign, Clock, Store } from 'lucide-react';
 import { toast } from 'sonner';
 
-type ChargeStatus = 'WAITING' | 'MATCHED' | 'MANUAL_REVIEW' | 'EXPIRED' | 'CANCELLED';
+import { cashierPaymentState } from '@/lib/payments/cashierState';
 type Provider = 'mercado_pago' | 'uala' | 'mock';
 
 interface ExpectedPaymentView {
@@ -14,7 +14,8 @@ interface ExpectedPaymentView {
     amount: number;
     currency: string;
     reference: string | null;
-    status: ChargeStatus;
+    status: 'WAITING' | 'MATCHED' | 'MANUAL_REVIEW' | 'EXPIRED' | 'CANCELLED';
+
     createdAt: string;
     expiresAt: string;
     checkoutUrl: string | null;
@@ -42,18 +43,18 @@ interface FeedItem {
 }
 
 const providerNames: Record<string, string> = { mercado_pago: 'MP', uala: 'Ualá', mock: 'Test' };
-const statusLabels: Record<ChargeStatus, string> = {
-    WAITING: 'Esperando pago',
-    MATCHED: 'Pago confirmado',
-    MANUAL_REVIEW: 'Requiere revisión: hay más de un cobro igual',
-    EXPIRED: 'Cobro vencido',
-    CANCELLED: 'Cobro cancelado',
+const statusLabels: Record<ExpectedPaymentView['status'], string> = {
+    WAITING: 'Pendiente',
+    MATCHED: 'Recibido',
+    MANUAL_REVIEW: 'Revisar: pago ambiguo',
+    EXPIRED: 'Vencido',
+    CANCELLED: 'Cancelado',
 };
 const inputClass = 'w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white';
 const money = (amount: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
 const time = (date: string) => new Date(date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-function statusClass(status: ChargeStatus) {
+function statusClass(status: ExpectedPaymentView['status']) {
     if (status === 'MATCHED') return 'bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300';
     if (status === 'MANUAL_REVIEW') return 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300';
     if (status === 'WAITING') return 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300';
@@ -326,6 +327,11 @@ function Terminal({ role, storeId }: { role: 'owner' | 'admin' | 'employee'; sto
             </div>
 
             <div className="p-4 space-y-4">
+                <section aria-label="Flujo de cobro" className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cobro esperado → pago recibido</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">El estado se actualiza al confirmar el proveedor. Si hay más de una coincidencia, lo revisás antes de asignarlo.</p>
+                    {activeCharge && <p className="mt-2 text-sm font-semibold">Estado actual: {cashierPaymentState(activeCharge).label}</p>}
+                </section>
                 <section className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Nuevo cobro</h2>
                     <form onSubmit={createCharge} className="space-y-3">
