@@ -22,6 +22,12 @@
 | 14 | [07-redundancias-y-viabilidad.md](07-redundancias-y-viabilidad.md) | Duplicaciones de código, documentos y viabilidad PAY-7..29 |
 | 15 | [99-pendientes.md](99-pendientes.md) | Lista consolidada de decisiones e inferencias pendientes |
 
+## Referencias operativas relacionadas
+
+- [Runbook de cola de webhooks](../WEBHOOKS_QUEUE.md): operación y diagnóstico PAY-14.
+- [Guía OAuth Mercado Pago](../OAUTH_MERCADOPAGO.md): flujo OAuth específico del proveedor.
+- Implementación PAY-14 y requisitos pendientes de staging: [07](07-redundancias-y-viabilidad.md) y [99](99-pendientes.md).
+
 ## Reglas para agentes
 
 - Antes de modificar comportamiento, leer este paquete y seguir los RF/RN/CU; el código observado es evidencia de implementación, no aprobación de producto.

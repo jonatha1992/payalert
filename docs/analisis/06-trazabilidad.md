@@ -8,9 +8,9 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | RF-02 | 🟡 | CU-01 | `/dashboard/integrations` | `GET/POST /api/integrations`, `DELETE /api/integrations/{id}` | `frontend/lib/server/connections.ts` | `frontend/tests/payments/connectors.test.ts` [parcial] | PAY-7, PAY-8 |
 | RF-03 | 🟡 | CU-01 | `/dashboard/integrations` | `GET/PUT /api/integrations/mercadopago` | `frontend/app/api/integrations/mercadopago/route.ts` | `frontend/tests/payments/mercadopagoOAuth.test.ts` | PAY-15 |
 | RF-04 | 🟡 | CU-02 | `/dashboard/integrations` | `GET /api/integrations/{id}/health` | `frontend/lib/payments/connectionHealth.ts`; `frontend/lib/server/connections.ts` | `frontend/tests/payments/connectionHealth.test.ts`, `connectors-health.test.ts` | PAY-13 |
-| RF-05 | 🟡 | CU-03 | N/A (externo) | `POST /api/webhooks/mercadopago`; `POST /api/webhooks/uala` | `frontend/lib/server/webhookHandler.ts`; connectors | `frontend/tests/server/webhookHandler.test.ts`, `frontend/tests/payments/connectors.test.ts` | PAY-9, PAY-10, PAY-14 |
+| RF-05 | 🟡 | CU-03 | N/A (externo) | `POST /api/webhooks/mercadopago`; `POST /api/webhooks/uala` | `frontend/lib/server/webhookHandler.ts`; connectors; migración 010 | `frontend/tests/server/webhookHandler.test.ts`, `frontend/tests/payments/connectors.test.ts` | PAY-9, PAY-10, PAY-14 |
 | RF-06 | 🟡 | CU-03 | Dashboard/terminal | worker `POST /api/internal/webhook-worker` | `frontend/lib/payments/ingest.ts`; `frontend/lib/server/paymentsRepository.ts` | `frontend/tests/payments/ingest.test.ts`, `frontend/tests/integration/paymentsPipeline.test.ts` | PAY-9, PAY-10 |
-| RF-07 | 🟡 | CU-03, CU-10 | N/A | `POST /api/internal/webhook-worker`; `POST /api/webhooks/replay` | `frontend/lib/server/webhookQueue.ts`; `webhookWorker.ts` | `frontend/tests/server/webhookQueue.test.ts`, `webhookWorker.test.ts`, `webhookReplay.test.ts` | PAY-14 |
+| RF-07 | 🟡 | CU-03, CU-10 | N/A | `POST /api/internal/webhook-worker`; `POST /api/webhooks/replay`; `GET /api/internal/webhook-metrics` (owner-only) | `frontend/lib/server/webhookQueue.ts`; `webhookWorker.ts`; migraciones 010–011; `vercel.json` | `frontend/tests/server/webhookQueue.test.ts`, `webhookWorker.test.ts`, `webhookReplay.test.ts`, `webhookMetricsRoute.test.ts` | PAY-14 |
 | RF-08 | ✅ | CU-04 | `/dashboard/terminal` | `GET/POST /api/expected-payments`; `GET/PATCH /api/expected-payments/{id}`; cancel | `frontend/lib/server/expectedPayments.ts` | `frontend/tests/payments/ingest.test.ts` [indirecto] | PAY-16 |
 | RF-09 | ✅ | CU-05 | `/dashboard/terminal` | `GET .../{id}/candidates` o consulta de cobro | `frontend/lib/payments/matching.ts`; `frontend/lib/server/expectedPayments.ts` | `frontend/tests/payments/matching.test.ts`, `matchCandidatePersistence.test.ts` | PAY-16 (comentario Jira dice completado) |
 | RF-10 | 🟡 | CU-05 | `/dashboard/terminal` | `PATCH /api/expected-payments/{id}`; `DELETE .../{id}/candidates` | `frontend/lib/server/expectedPayments.ts`; `frontend/lib/server/audit.ts` | `frontend/tests/server/manualResolutionAudit.test.ts` | PAY-16 |
@@ -29,7 +29,7 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | RNF-06 | ✅ | CU-06 | `/dashboard/reports` | movements | `frontend/lib/reports/query.ts` | `frontend/tests/reports/query.test.ts` | PAY-18 |
 | RNF-07 | 🟡 | CU-02 | Integraciones | health | `frontend/lib/payments/connectionHealth.ts` | tests health | PAY-13 |
 | RNF-08 | 🟡 | CU-03 | N/A | webhook ACK + worker | `frontend/lib/server/webhookHandler.ts` | `frontend/tests/server/webhookHandler.test.ts` | PAY-14 |
-| RNF-09 | 🟡 | CU-03/06 | N/A | varias | `frontend/lib/security/rateLimiter.ts`; `withRateLimit.ts` | [Pendiente: integración distribuida/staging] | PAY-14 |
+| RNF-09 | 🟡 | CU-03/06 | N/A | rutas con wrapper aplicable | `frontend/lib/security/rateLimiter.ts`; `withRateLimit.ts`; migración 011 (RPC `rate_limit_hit`, fallback memoria) | [Pendiente: validación de entorno staging/cobertura] | PAY-14 |
 | RNF-10 | 🟡 | CU-08 | UI auth | API interna | `frontend/lib/server/session.ts`; `frontend/proxy.ts` | `frontend/tests/server/scope.test.ts` | PAY-17 |
 
 ## Casos de uso y vínculo con tickets

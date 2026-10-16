@@ -17,8 +17,11 @@ Los diagramas son vistas de código y fuentes del repo, no diseño aprobado. Se 
 11. **Seguridad/roles — parcial**: enforcement se refleja parcialmente en [architecture.drawio](../diagrams/architecture.drawio) y CU-08 en [usecase-pn6.drawio](../diagrams/usecase-pn6.drawio). Tabla actor×CU y permisos autoritativa en [01](01-actores-y-roles.md). [Pendiente] diagrama dedicado de amenazas tras acordar actor support y matriz.
 12. **Flujo de datos/migración e IA/búsqueda — no aplica IA; migración pendiente**: no se encontró motor IA/búsqueda. La migración token legacy→connection existe en scripts/RN-08 pero no se dibuja como cutover operativo, pues staging/rollback requieren evidencia. [Pendiente] diagrama de migración tras validar pasos y retorno.
 
-## Validación visual y limitaciones
+- El flujo PAY-14 de dev verifica la autenticidad antes de encolar; la respuesta ACK rápida se emite tras aceptación en cola. Worker/replay y rutas internas de métricas implementados. Ver [07](07-redundancias-y-viabilidad.md) y `docs/WEBHOOKS_QUEUE.md`.
+- Migraciones 010 (cola `webhook_events`) y 011 (RPC `rate_limit_hit` con fallback en memoria) forman parte de la implementación de dev; no se afirma que estén aplicadas en staging.
+- `vercel.json` programa ejecución de worker cada minuto; ese intervalo no es compatible con Vercel Hobby. Falta decisión del dueño: plan Pro o bajar la frecuencia.
 
+## Validación visual y limitaciones
 - El generador produjo PNG para los archivos catalogados; el spec técnico está en [`../diagrams/src/diagrams.json`](../diagrams/src/diagrams.json); `diagram-neutral.json` fue retirado.
 - Inspección visual: contexto, activity, UC PN1–PN6, secuencia CU-03, clases, arquitectura y despliegue. Se observan cruces/clutter en activity, UC PN1/PN3/PN6, clase y arquitectura/despliegue; deben corregirse antes de considerarlos visualmente aprobados. Secuencia CU-03 legible. La imagen ER se generó tras corregir el DDL vacío inicial; revisión visual independiente del resultado actual queda pendiente.
 - Las otras secuencias y estados tienen PNG pero no se inspeccionaron individualmente; quedan [Pendiente] inspección y ajuste. PNG generado no significa diagrama aceptado.

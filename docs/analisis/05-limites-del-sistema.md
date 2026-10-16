@@ -13,9 +13,10 @@
 | LIM-07 | Pricing, límites de planes SaaS, trial, billing o cobro a comercios. | PAY-28; `docs/PLANES_SAAS.md` declara propuesta no validada. |
 | LIM-08 | Analytics avanzada, IA, anomalías, forecasting, Excel/PDF fuera de lo que exista en rutas actuales. | PAY-24/27; código verificado exporta CSV; PRD 23/43 no disponible. |
 | LIM-09 | Scraping de home banking, captura de credenciales bancarias ajenas, o movimiento de fondos. | PAY-11/21/22/26; fuera de límites y riesgo. |
-| LIM-10 | Garantía de despliegue, SLA/latencia objetivo, rate limit distribuido, seguridad operacional de staging/prod sin evidencia de ambiente. | PAY-8/9/10/12/14; tickets y código no demuestran configuración productiva. |
+| LIM-10 | No se afirma garantía de despliegue, SLA/latencia objetivo ni validación operacional de staging/prod sin evidencia de entorno; la limitación distribuida está implementada en dev pero no validada en staging. | PAY-8/9/10/12/14; tickets y código no demuestran configuración productiva. |
 | LIM-11 | Replatform PayWatch/FastAPI/Redis/Celery/Vue como arquitectura aprobada. | PAY-29; ADR-001 es análisis/propuesta, no orden de reescritura. |
 | LIM-12 | Administración integral de negocio, invitación y roles conforme docs antiguos. Solo considerar operativa la ruta/pantalla localizada y RBAC comprobable. | `docs/API_Documentation.md` describe endpoints ausentes; comparar [00](00-descripcion-global.md). |
+| LIM-13 | Operación PAY-14 está implementada en dev, pero no se afirma staging validado. Cron cada minuto configurado en `vercel.json` no es compatible con Vercel Hobby; decidir plan Pro o reducir frecuencia. | PAY-14; `docs/WEBHOOKS_QUEUE.md`; ver [07](07-redundancias-y-viabilidad.md). |
 
 ## Guardrails para agentes de desarrollo y operaciones
 
