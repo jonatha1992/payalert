@@ -10,29 +10,32 @@
 
 En el dashboard de Vercel, ve a tu proyecto → Settings → Environment Variables:
 
-### Variables Obligatorias
+### Variables por función
 
 ```bash
-# Supabase (Obligatorio)
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
-SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+# Supabase (requerido; valores del proyecto del entorno objetivo)
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key-del-entorno>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key-del-entorno>
 
-# VAPID Keys para Push Notifications (Obligatorio)
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=BPTvqMPsdR_obQjJDQkG_SfbgsX2iZq8rgbsK3yJp_e_w3wLsdHSCQk5iDss2R0Ug92hWV7sZT0Le4fS-V99NhA
-VAPID_PRIVATE_KEY=xabyv9EYhIMWWUIM-LxpIXuPkx8HoektnbiBZSs-gQU
-VAPID_SUBJECT=mailto:soporte@payalert.com
+# Cifrado de credenciales de proveedores (secreto; generar por entorno)
+# openssl rand -base64 32
+PAYMENTS_ENCRYPTION_KEY=<32-bytes-en-base64>
 
-# App URL (Obligatorio - cambiar por tu dominio de Vercel)
-NEXT_PUBLIC_APP_URL=https://payalert-tuusuario.vercel.app
+# Push (si se habilitan notificaciones; generar un par por entorno)
+# npx web-push generate-vapid-keys
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=<vapid-public-key>
+VAPID_PRIVATE_KEY=<vapid-private-key>
+VAPID_SUBJECT=mailto:<contacto-de-soporte>
 
-# Mercado Pago (Opcional - para webhooks en producción)
-MP_ACCESS_TOKEN=TEST-...
-MP_WEBHOOK_SECRET=tu-webhook-secret-de-produccion
-
-# Ualá (Opcional - para webhooks en producción)
-UALA_WEBHOOK_SECRET=tu-webhook-secret-de-uala
+# Variable opcional para pruebas aisladas, normalmente ausente en staging compartido
+PAYMENTS_ENABLE_SIMULATOR=false
 ```
+
+No copiar valores de ejemplo al proyecto. La guía anterior contenía valores VAPID con formato de claves; si alguno se usó en un entorno, generar un par nuevo y reemplazarlo allí antes de habilitar push. `SUPABASE_SERVICE_ROLE_KEY`, `PAYMENTS_ENCRYPTION_KEY` y `VAPID_PRIVATE_KEY` son secretos: configurarlos solo del lado servidor y nunca con prefijo `NEXT_PUBLIC_`. Guardar claves reales en un gestor seguro; no commitearlas ni pegarlas en tickets.
+
+Las credenciales y secretos de Mercado Pago/Ualá se configuran por conexión autenticada en Integraciones y se guardan cifrados; no configurar `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` ni `UALA_WEBHOOK_SECRET` como variables globales de entorno. Ualá Bis v2 no firma webhooks; ver `docs/providers/uala.md`.
+
 
 ## Paso 2: Configurar Webhooks en Mercado Pago
 
@@ -44,7 +47,7 @@ UALA_WEBHOOK_SECRET=tu-webhook-secret-de-uala
    https://payalert-tuusuario.vercel.app/api/webhooks/mercadopago
    ```
 5. Selecciona eventos: `payment` (pagos)
-6. Guarda el "Webhook Secret" que te dan y agrégalo a las variables de entorno
+6. Vincula el secret a la conexión del comercio desde Integraciones; no lo agregues como variable global de Vercel.
 
 ## Paso 3: Configurar Webhooks en Ualá Bis
 
@@ -54,7 +57,7 @@ UALA_WEBHOOK_SECRET=tu-webhook-secret-de-uala
    ```
    https://payalert-tuusuario.vercel.app/api/webhooks/uala
    ```
-4. Guarda el secret y agrégalo a variables de entorno
+4. Configura el endpoint y las credenciales del comercio por la conexión Ualá Bis v2 en Integraciones. El callback v2 no requiere un webhook secret; PayAlert valida el UUID de la orden y la consulta a Ualá.
 
 ## Paso 4: Configurar Dominio Personalizado (Opcional)
 
