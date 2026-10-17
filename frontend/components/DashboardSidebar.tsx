@@ -27,7 +27,7 @@ export default function DashboardSidebar() {
     const items = profile?.role === 'employee' ? employeeItems : ownerItems;
 
     return (
-        <aside className="w-64 bg-gray-900 text-white min-h-screen p-4 flex flex-col border-r border-gray-800">
+        <aside className="w-full md:w-56 shrink-0 bg-gray-900 text-white min-h-0 md:min-h-screen p-3 md:p-4 flex flex-col border-b md:border-b-0 md:border-r border-gray-800">
             <div className="mb-8 px-4">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-600">
                     PayAlert
@@ -45,12 +45,12 @@ export default function DashboardSidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                            className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-all duration-200 ${isActive
                                 ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20 shadow-[0_0_15px_rgba(37,99,235,0.1)]'
                                 : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
                                 }`}
                         >
-                            <Icon size={20} className={isActive ? 'text-blue-400' : 'text-gray-500'} />
+                            <Icon size={18} className={isActive ? 'text-blue-400' : 'text-gray-500'} />
                             <span className="font-medium text-sm">{item.name}</span>
                         </Link>
                     );
@@ -58,15 +58,15 @@ export default function DashboardSidebar() {
             </nav>
 
             <div className="mt-auto border-t border-gray-800 pt-4">
-                <div className="px-4 py-3 mb-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
+                <div className="px-3 py-2 mb-3 bg-gray-800/50 rounded-xl border border-gray-700/50">
                     <p className="text-xs text-gray-500">Sesión como</p>
-                    <p className="text-sm font-medium text-gray-200 truncate">{profile?.first_name} {profile?.last_name}</p>
+                    <p className="text-sm font-medium text-gray-200 truncate">{profile?.first_name || profile?.email || 'Usuario'} {profile?.last_name}</p>
                 </div>
                 <button
                     onClick={() => signOut()}
-                    className="flex items-center space-x-3 px-4 py-3 w-full rounded-xl text-red-400 hover:bg-red-400/10 hover:text-red-300 transition-all duration-200 group"
+                    className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg text-red-400 hover:bg-red-400/10 hover:text-red-300 transition-all duration-200 group"
                 >
-                    <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
+                    <LogOut size={18} className="group-hover:translate-x-1 transition-transform" />
                     <span className="font-medium text-sm">Cerrar Sesión</span>
                 </button>
             </div>

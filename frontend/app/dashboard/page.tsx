@@ -68,6 +68,7 @@ export default function DashboardPage() {
 interface Profile {
     id: string;
     first_name: string;
+    email?: string;
     business_id: string;
 }
 
@@ -182,7 +183,7 @@ function EmployeeTerminal({ profile }: { profile: Profile }) {
                         Terminal de Cobros
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1">
-                        Hola {profile.first_name}, aquí verás los pagos entrantes en tiempo real.
+                        Hola {profile.first_name || profile.email?.split('@')[0] || 'ahí'}, aquí verás los pagos entrantes en tiempo real.
                     </p>
                     <div className="mt-2 flex items-center space-x-2">
                         <span className={`h-2.5 w-2.5 rounded-full ${listening ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
@@ -269,6 +270,7 @@ function EmployeeTerminal({ profile }: { profile: Profile }) {
 interface DashboardProfile {
     id: string;
     first_name: string;
+    email?: string;
     business_id: string;
 }
 
@@ -343,7 +345,7 @@ function OwnerDashboard({ profile }: { profile: DashboardProfile }) {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                        ¡Hola, {profile?.first_name}! 👋
+                        ¡Hola, {profile?.first_name || profile?.email?.split('@')[0] || 'ahí'}! 👋
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1">
                         Aquí tienes un resumen de lo que está pasando en tu negocio hoy.

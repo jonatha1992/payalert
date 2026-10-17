@@ -11,6 +11,7 @@ interface Profile {
     business_id: string;
     first_name: string;
     last_name: string;
+    email?: string;
     assigned_store_id?: string;
 }
 
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
-        const fetchProfile = async (userId: string) => {
+        const fetchProfile = async (userId: string, email?: string) => {
             console.log('[Auth] Fetching profile for:', userId);
             try {
                 const { data, error } = await supabase
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setProfile(null);
                     return;
                 }
-                setProfile(data);
+                setProfile({ ...data, email: email ?? '' });
             } catch (err: unknown) {
                 console.error('[Auth] Catch error fetching profile:', err);
                 
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(initialSession?.user ?? null);
             
             if (initialSession?.user) {
-                await fetchProfile(initialSession.user.id);
+                await fetchProfile(initialSession.user.id, initialSession.user.email);
             } else {
                 setLoading(false);
             }
@@ -89,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 
                 if (session?.user) {
                     // No esperar dentro del callback: supabase-js retiene un lock y la consulta se auto-bloquea.
-                    setTimeout(() => { void fetchProfile(session.user.id); }, 0);
+                    setTimeout(() => { void fetchProfile(session.user.id, session.user.email); }, 0);
                 } else {
                     setProfile(null);
                     setLoading(false);
