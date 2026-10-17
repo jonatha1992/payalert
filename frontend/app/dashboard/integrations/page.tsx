@@ -1,8 +1,12 @@
 ﻿"use client";
 
 import { MercadoPagoOAuthConnect } from "./MercadoPagoOAuthConnect";
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { CreditCard, Wallet, X, MapPin, Trash2 } from "lucide-react";
+import { useFormValidation } from "@/hooks/useFormValidation";
+import { FormField } from "@/components/FormField";
+import { integrationCredentialSchemas } from "@/lib/validation/integrations";
+import { IntegrationHelp } from "@/components/IntegrationHelp";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
@@ -70,6 +74,14 @@ export default function IntegrationsPage() {
     "mercado_pago" | "uala" | null
   >(null);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const initialCredentials = {
+    accessToken: "", webhookSecret: "", username: "", clientId: "", clientSecretId: "",
+  };
+  const credentialForm = useFormValidation(
+    selectedProvider === "uala" ? integrationCredentialSchemas.uala : integrationCredentialSchemas.mercadoPago,
+    initialCredentials,
+  );
+
 
   useEffect(() => {
     if (!profile?.business_id) return;
@@ -116,49 +128,42 @@ export default function IntegrationsPage() {
         body: JSON.stringify(input),
       });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error || "Error al guardar integración");
+      if (!response.ok) throw new Error(data.error || "Error al guardar integración");
       setConnections((previous) => [data.connection, ...previous]);
       setSelectedProvider(null);
       toast.success("Integración guardada exitosamente");
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error al guardar integración",
-      );
+      const message = error instanceof Error ? error.message : "";
+      toast.error(message.includes("credentials") || message.includes("credential") ? "Revisá que las claves estén copiadas completas y correspondan al entorno elegido." : "No pudimos guardar la integración. Revisá los datos e intentá de nuevo.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSave = async (event: { preventDefault(): void }) => {
     if (!selectedProvider || loading) return;
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const value = (key: string) => String(data.get(key) ?? "").trim();
-    const input: CreateConnectionInput = {
-      provider: selectedProvider,
-      label: value("label") || null,
-      storeId: value("storeId") || null,
-      ...(selectedProvider === "mercado_pago"
-        ? {
-            accessToken: value("accessToken"),
-            webhookSecret: value("webhookSecret"),
-          }
-        : {
-            username: value("username"),
-            clientId: value("clientId"),
-            clientSecretId: value("clientSecretId"),
-            environment:
-              value("environment") === "stage"
-                ? ("stage" as const)
-                : ("production" as const),
-            amountInCents: data.get("amountInCents") === "on",
-          }),
-    };
-    // Clear credentials immediately, including when the request fails.
-    form.reset();
-    void connect(input);
+    await credentialForm.submit(event, async (normalized) => {
+      const value = (field: keyof typeof normalized) => String(normalized[field] ?? "");
+      const formData = new FormData(document.querySelector<HTMLFormElement>("#integration-form")!);
+      const input: CreateConnectionInput = {
+        provider: selectedProvider,
+        label: String(formData.get("label") ?? "").trim() || null,
+        storeId: String(formData.get("storeId") ?? "").trim() || null,
+        ...(selectedProvider === "mercado_pago"
+          ? { accessToken: value("accessToken"), webhookSecret: value("webhookSecret") }
+          : {
+              username: value("username"), clientId: value("clientId"), clientSecretId: value("clientSecretId"),
+              environment: formData.get("environment") === "stage" ? "stage" as const : "production" as const,
+              amountInCents: formData.get("amountInCents") === "on",
+            }),
+      };
+      credentialForm.change("accessToken", "");
+      credentialForm.change("webhookSecret", "");
+      credentialForm.change("username", "");
+      credentialForm.change("clientId", "");
+      credentialForm.change("clientSecretId", "");
+      await connect(input);
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -280,6 +285,11 @@ export default function IntegrationsPage() {
                 setWebhookUrl(
                   `${window.location.origin}/api/webhooks/mercadopago`,
                 );
+                credentialForm.change("accessToken", "");
+                credentialForm.change("webhookSecret", "");
+                credentialForm.change("username", "");
+                credentialForm.change("clientId", "");
+                credentialForm.change("clientSecretId", "");
                 setSelectedProvider(provider);
               }}
               className={`mt-6 w-full py-2 text-white rounded-lg font-medium transition-colors disabled:opacity-50 ${provider === "mercado_pago" ? "bg-blue-600 hover:bg-blue-700" : "bg-pink-600 hover:bg-pink-700"}`}
@@ -401,133 +411,45 @@ export default function IntegrationsPage() {
 
       {selectedProvider && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="integration-title"
-            className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative shadow-xl"
-          >
+          <div role="dialog" aria-modal="true" aria-labelledby="integration-title" className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 relative shadow-xl">
             <button
               disabled={loading}
               onClick={() => setSelectedProvider(null)}
               aria-label="Cerrar"
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-            >
-              <X size={24} />
-            </button>
-            <h2
-              id="integration-title"
-              className="text-2xl font-bold mb-6 pr-6 text-gray-900 dark:text-white"
-            >
-              Conectar {providerNames[selectedProvider]}
-            </h2>
-            <form onSubmit={handleSave}>
-              <fieldset disabled={loading} className="space-y-4">
-                {(selectedProvider === "mercado_pago"
-                  ? [
-                      {
-                        name: "accessToken",
-                        label: "Access Token",
-                        type: "password",
-                      },
-                      {
-                        name: "webhookSecret",
-                        label: "Webhook secret signature",
-                        type: "password",
-                      },
-                    ]
-                  : [
-                      { name: "username", label: "Username", type: "text" },
-                      { name: "clientId", label: "client_id", type: "text" },
-                      {
-                        name: "clientSecretId",
-                        label: "client_secret_id",
-                        type: "password",
-                      },
-                    ]
-                ).map((field) => (
-                  <label
-                    key={field.name}
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {field.label}
-                    <input
-                      name={field.name}
-                      type={field.type}
-                      required
-                      autoComplete="off"
-                      className={`${inputClass} mt-1`}
-                    />
-                  </label>
-                ))}
-                {selectedProvider === "uala" && (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Entorno
-                      <select
-                        name="environment"
-                        className={`${inputClass} mt-1`}
-                        defaultValue="production"
-                      >
-                        <option value="production">production</option>
-                        <option value="stage">stage</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <input type="checkbox" name="amountInCents" />
-                      Enviar montos en centavos
-                    </label>
-                  </>
-                )}
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Etiqueta (opcional)
-                  <input name="label" className={`${inputClass} mt-1`} />
-                </label>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Sucursal (opcional)
-                  <select
-                    name="storeId"
-                    className={`${inputClass} mt-1`}
-                    defaultValue=""
-                  >
-                    <option value="">General (Todas)</option>
-                    {stores.map((store) => (
-                      <option key={store.id} value={store.id}>
-                        {store.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 break-words">
+            ><X size={24} /></button>
+            <h2 id="integration-title" className="text-2xl font-bold mb-5 pr-8 text-gray-900 dark:text-white">Conectar {providerNames[selectedProvider]}</h2>
+            {selectedProvider === "mercado_pago" && process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED === "true" && <div className="mb-5"><MercadoPagoOAuthConnect /></div>}
+            <IntegrationHelp provider={selectedProvider} webhookUrl={webhookUrl} />
+            <details className="mt-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+              <summary className="cursor-pointer font-medium text-gray-900 dark:text-white">Avanzado: cargar claves a mano</summary>
+              <form id="integration-form" onSubmit={(event) => void handleSave(event)} className="mt-4">
+                <fieldset disabled={loading || credentialForm.submitting} className="space-y-4">
                   {selectedProvider === "mercado_pago" ? (
                     <>
-                      Configura el webhook{" "}
-                      <span className="font-mono">{webhookUrl}</span>, evento
-                      &quot;Pagos&quot;. El secreto se obtiene en Tus
-                      integraciones &gt; Webhooks.
+                      <FormField name="accessToken" label="Clave de acceso de Mercado Pago (Access Token de producción)" type="password" required autoComplete="off" maxLength={4096} value={String(credentialForm.values.accessToken)} onChange={(value) => credentialForm.change("accessToken", value)} onBlur={() => credentialForm.blur("accessToken")} error={credentialForm.errorFor("accessToken")} />
+                      <p className="-mt-3 text-xs text-gray-600 dark:text-gray-400">Copiala en las credenciales de producción de tu aplicación. Formato de ejemplo: APP_USR-•••••••• (solo ilustrativo). No la compartas con nadie.</p>
+                      <FormField name="webhookSecret" label="Clave secreta de las notificaciones" type="password" autoComplete="off" maxLength={4096} value={String(credentialForm.values.webhookSecret)} onChange={(value) => credentialForm.change("webhookSecret", value)} onBlur={() => credentialForm.blur("webhookSecret")} error={credentialForm.errorFor("webhookSecret")} />
+                      <p className="-mt-3 text-xs text-gray-600 dark:text-gray-400">Copiala en Webhooks, dentro de tu aplicación. Ejemplo de formato: una cadena larga de letras y números (sin valor real). No la compartas con nadie.</p>
                     </>
                   ) : (
-                    "Las notificaciones llegan automáticamente para los cobros creados desde PayAlert."
+                    <>
+                      <FormField name="username" label="Usuario de Ualá Bis" required autoComplete="off" maxLength={255} value={String(credentialForm.values.username)} onChange={(value) => credentialForm.change("username", value)} onBlur={() => credentialForm.blur("username")} error={credentialForm.errorFor("username")} />
+                      <p className="-mt-3 text-xs text-gray-600 dark:text-gray-400">Usá el usuario que te informó Ualá Bis; el formato puede variar según tu cuenta.</p>
+                      <FormField name="clientId" label="Identificador de cliente (client_id)" required autoComplete="off" maxLength={255} value={String(credentialForm.values.clientId)} onChange={(value) => credentialForm.change("clientId", value)} onBlur={() => credentialForm.blur("clientId")} error={credentialForm.errorFor("clientId")} />
+                      <p className="-mt-3 text-xs text-gray-600 dark:text-gray-400">Copialo de las credenciales de integración que te dio Ualá Bis. Ejemplo: una cadena identificadora, sin valor real.</p>
+                      <FormField name="clientSecretId" label="Clave secreta de Ualá Bis (client_secret_id)" type="password" required autoComplete="off" maxLength={4096} value={String(credentialForm.values.clientSecretId)} onChange={(value) => credentialForm.change("clientSecretId", value)} onBlur={() => credentialForm.blur("clientSecretId")} error={credentialForm.errorFor("clientSecretId")} />
+                      <p className="-mt-3 text-xs text-gray-600 dark:text-gray-400">Copiala de tus credenciales de integración. Ejemplo: una cadena secreta larga (sin valor real). No la compartas con nadie.</p>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Entorno<select name="environment" className={`${inputClass} mt-1`} defaultValue="production"><option value="production">Producción</option><option value="stage">Pruebas (stage)</option></select></label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" name="amountInCents" />Enviar montos en centavos</label>
+                    </>
                   )}
-                </p>
-                <div className="pt-4 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProvider(null)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
-                    disabled={loading}
-                  >
-                    {loading ? "Guardando..." : "Guardar Integración"}
-                  </button>
-                </div>
-              </fieldset>
-            </form>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Etiqueta (opcional)<input name="label" className={`${inputClass} mt-1`} /></label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal (opcional)<select name="storeId" className={`${inputClass} mt-1`} defaultValue=""><option value="">General (Todas)</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
+                  <div className="pt-2 flex flex-col-reverse gap-3 sm:flex-row"><button type="button" onClick={() => setSelectedProvider(null)} className="flex-1 min-h-11 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200">Cancelar</button><button type="submit" className="flex-1 min-h-11 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50" disabled={loading || credentialForm.submitting || !credentialForm.isValid}>{loading ? "Guardando..." : "Guardar integración"}</button></div>
+                </fieldset>
+              </form>
+            </details>
           </div>
         </div>
       )}
