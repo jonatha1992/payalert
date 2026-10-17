@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Store, Plus, Loader2, MapPin, Phone, Trash2, Pencil, X } from 'lucide-react';
@@ -23,7 +23,7 @@ export default function StoresPage() {
     const [stores, setStores] = useState<StoreData[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchStores = async () => {
+    const fetchStores = useCallback(async () => {
         setLoading(true);
         if (!profile?.business_id) {
             setLoading(false);
@@ -44,11 +44,11 @@ export default function StoresPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [profile?.business_id]);
 
     useEffect(() => {
         fetchStores();
-    }, [profile]);
+    }, [fetchStores]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const storeForm = useFormValidation(validationSchemas.store, { name: '', address: '', phone: '' });
@@ -244,8 +244,8 @@ export default function StoresPage() {
                         </h2>
                         
                         <form onSubmit={handleSaveStore} className="space-y-4">
-                            <FormField label="Nombre" name="name" value={newStore.name} onChange={value => change('name', value)} onBlur={() => storeForm.blur('name')} error={errorFor('name')} maxLength={120} placeholder="Ej. Sucursal Centro" required />
-                            <FormField label="Dirección" name="address" value={newStore.address} onChange={value => change('address', value)} onBlur={() => storeForm.blur('address')} error={errorFor('address')} maxLength={255} placeholder="Av. Principal 123" />
+                            <FormField label="Nombre" name="name" value={newStore.name} onChange={value => change('name', value)} onBlur={() => storeForm.blur('name')} error={errorFor('name')} maxLength={80} placeholder="Ej. Sucursal Centro" required />
+                            <FormField label="Dirección" name="address" value={newStore.address} onChange={value => change('address', value)} onBlur={() => storeForm.blur('address')} error={errorFor('address')} maxLength={200} placeholder="Av. Principal 123" />
                             <FormField label="Teléfono (opcional)" name="phone" type="tel" value={newStore.phone} onChange={value => change('phone', value)} onBlur={() => storeForm.blur('phone')} error={errorFor('phone')} maxLength={24} placeholder="+54 9 11..." />
                             <button type="submit" disabled={!isValid || createLoading} className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-blue-600/20">
                                 {createLoading ? <Loader2 className="animate-spin" /> : (editingStoreId ? 'Guardar Cambios' : 'Crear Sucursal')}

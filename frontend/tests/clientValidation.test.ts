@@ -4,7 +4,7 @@ import { validationSchemas } from '@/lib/validation';
 
 describe('client form validation', () => {
   it('returns field errors from the shared schema', () => {
-    expect(validateForm(validationSchemas.store, { name: '   ', address: '', phone: '' })).toEqual({ name: 'Ingresá al menos 1 caracteres.' });
+    expect(validateForm(validationSchemas.store, { name: '   ', address: '', phone: '' })).toEqual({ name: 'Ingresá al menos 2 caracteres.' });
   });
   it('blocks invalid values and returns normalized data when valid', () => {
     expect(validationSchemas.store({ name: '', address: '', phone: '' }).ok).toBe(false);

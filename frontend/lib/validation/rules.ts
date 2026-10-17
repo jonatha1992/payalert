@@ -69,6 +69,11 @@ export const password: Validator<string> = (input) => {
   return { ok: true, value: input };
 };
 
+export const requiredPassword: Validator<string> = (input) => {
+  if (typeof input !== 'string' || CONTROL.test(input) || input.length === 0) return invalid('La contraseña es obligatoria.');
+  return { ok: true, value: input };
+};
+
 export const uuid: Validator<string> = (input) => {
   if (typeof input !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input)) return invalid('Ingresá un identificador válido.');
   return { ok: true, value: input.toLowerCase() };

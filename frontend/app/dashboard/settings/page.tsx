@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, X, Store, Bell } from 'lucide-react';
+import { X, Store, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
 import PushNotificationSettings from '@/components/PushNotificationSettings';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { FormField } from '@/components/FormField';
 
 interface NotificationPreferences {
   pushEnabled: boolean;
@@ -18,24 +21,23 @@ interface NotificationPreferences {
 export default function DashboardSettingsPage() {
     const { profile } = useAuth();
     const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
-    const [businessName, setBusinessName] = useState('');
-    const [loading, setLoading] = useState(false);
+    const businessForm = useFormValidation(validationSchemas.settings, { name: '' });
+    const { values, change, errorFor, submit, isValid, submitting } = businessForm;
     const { preferences: prefs, loading: prefsLoading, update: updatePreference } = useNotificationPreferences(profile?.business_id);
 
     const handleOpenEditBusiness = async () => {
         if (!profile?.business_id) return;
         setIsEditBusinessOpen(true);
         const { data } = await supabase.from('businesses').select('name').eq('id', profile.business_id).single();
-        if (data) setBusinessName(data.name);
+        if (data) change('name', data.name);
     };
 
     const handleSaveBusiness = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
+        await submit(e, async (normalized) => {
         try {
             const { error } = await supabase
                 .from('businesses')
-                .update({ name: businessName })
+                .update({ name: normalized.name })
                 .eq('id', profile?.business_id);
             
             if (error) throw error;
@@ -44,9 +46,8 @@ export default function DashboardSettingsPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error al actualizar');
-        } finally {
-            setLoading(false);
         }
+        });
     };
 
     const toggleNotification = async (key: keyof NotificationPreferences) => {
@@ -144,23 +145,14 @@ export default function DashboardSettingsPage() {
                         <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Editar Negocio</h2>
                         
                         <form onSubmit={handleSaveBusiness} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del Negocio</label>
-                                <input 
-                                    required
-                                    type="text" 
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={businessName}
-                                    onChange={e => setBusinessName(e.target.value)}
-                                />
-                            </div>
+                            <FormField label="Nombre del Negocio" name="business-name" value={values.name} onChange={value => change('name', value)} onBlur={() => businessForm.blur('name')} error={errorFor('name')} maxLength={160} required />
 
                             <button 
                                 type="submit"
-                                disabled={loading}
+                                disabled={!isValid || submitting}
                                 className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                             >
-                                {loading ? <Spinner size="sm" className="text-white" /> : 'Guardar Cambios'}
+                                {submitting ? <Spinner size="sm" className="text-white" /> : 'Guardar Cambios'}
                             </button>
                         </form>
                     </div>

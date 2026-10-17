@@ -4,62 +4,50 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
+import { FormField } from '@/components/FormField';
 import Link from 'next/link';
 
 export default function NewBusinessPage() {
-    const [name, setName] = useState('');
-    // Mercado Pago
-    const [mpAccessToken, setMpAccessToken] = useState('');
-    const [mpPublicKey, setMpPublicKey] = useState('');
-    // Uala
-    const [ualaClientId, setUalaClientId] = useState('');
-    const [ualaClientSecret, setUalaClientSecret] = useState('');
-    
-    const [loading, setLoading] = useState(false);
+    const businessForm = useFormValidation(validationSchemas.newBusiness, { name: '', mpAccessToken: '', mpPublicKey: '', ualaClientId: '', ualaClientSecret: '' });
+    const { values, change, errorFor, submit, isValid, submitting } = businessForm;
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
+        await submit(e, async (normalized) => {
         setError(null);
 
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            const userId = user?.id;
+            await supabase.auth.getUser();
 
             const settings = {
                 payments: {
                     mercado_pago: {
-                        access_token: mpAccessToken,
-                        public_key: mpPublicKey,
-                        enabled: !!mpAccessToken
+                        access_token: values.mpAccessToken,
+                        public_key: values.mpPublicKey,
+                        enabled: !!values.mpAccessToken
                     },
                     uala: {
-                        client_id: ualaClientId,
-                        client_secret: ualaClientSecret,
-                        enabled: !!ualaClientId
+                        client_id: values.ualaClientId,
+                        client_secret: values.ualaClientSecret,
+                        enabled: !!values.ualaClientId
                     }
                 }
             };
 
-            const payload: any = { 
-                name,
-                settings
-            };
-
             const { error } = await supabase
                 .from('businesses')
-                .insert([payload]);
+                .insert([{ name: normalized.name, settings }]);
 
             if (error) throw error;
 
             router.push('/admin/businesses');
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'No se pudo crear el negocio. Revisá los datos e intentá de nuevo.');
         }
+        });
     };
 
     return (
@@ -68,17 +56,11 @@ export default function NewBusinessPage() {
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del Negocio</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                            placeholder="Ej. Mi Tienda Genial"
-                            required
-                        />
-                    </div>
+                    <FormField label="Nombre del Negocio" name="name" value={values.name} onChange={value => change('name', value)} onBlur={() => businessForm.blur('name')} error={errorFor('name')} maxLength={160} placeholder="Ej. Mi Tienda Genial" required />
+
+                    {error && (
+                        <div role="alert" className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{error}</div>
+                    )}
 
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
                         <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Configuración de Pagos</h2>
@@ -89,7 +71,7 @@ export default function NewBusinessPage() {
                                 <div className="flex items-center space-x-3 mb-4">
                                     <input 
                                         type="checkbox" 
-                                        checked={!!mpAccessToken} 
+                                        checked={!!values.mpAccessToken}
                                         readOnly 
                                         className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                                     />
@@ -105,8 +87,8 @@ export default function NewBusinessPage() {
                                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Access Token</label>
                                         <input
                                             type="password"
-                                            value={mpAccessToken}
-                                            onChange={(e) => setMpAccessToken(e.target.value)}
+                                            value={values.mpAccessToken}
+                                            onChange={(e) => change('mpAccessToken', e.target.value)}
                                             className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
                                             placeholder="APP_USR-..."
                                         />
@@ -115,8 +97,8 @@ export default function NewBusinessPage() {
                                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Public Key</label>
                                         <input
                                             type="text"
-                                            value={mpPublicKey}
-                                            onChange={(e) => setMpPublicKey(e.target.value)}
+                                            value={values.mpPublicKey}
+                                            onChange={(e) => change('mpPublicKey', e.target.value)}
                                             className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
                                             placeholder="APP_USR-..."
                                         />
@@ -129,7 +111,7 @@ export default function NewBusinessPage() {
                                 <div className="flex items-center space-x-3 mb-4">
                                     <input 
                                         type="checkbox" 
-                                        checked={!!ualaClientId} 
+                                        checked={!!values.ualaClientId}
                                         readOnly 
                                         className="h-4 w-4 text-pink-600 rounded border-gray-300 focus:ring-pink-500"
                                     />
@@ -145,8 +127,8 @@ export default function NewBusinessPage() {
                                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Client ID</label>
                                         <input
                                             type="text"
-                                            value={ualaClientId}
-                                            onChange={(e) => setUalaClientId(e.target.value)}
+                                            value={values.ualaClientId}
+                                            onChange={(e) => change('ualaClientId', e.target.value)}
                                             className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
                                             placeholder="Client ID"
                                         />
@@ -155,8 +137,8 @@ export default function NewBusinessPage() {
                                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Client Secret</label>
                                         <input
                                             type="password"
-                                            value={ualaClientSecret}
-                                            onChange={(e) => setUalaClientSecret(e.target.value)}
+                                            value={values.ualaClientSecret}
+                                            onChange={(e) => change('ualaClientSecret', e.target.value)}
                                             className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
                                             placeholder="Client Secret"
                                         />
@@ -181,10 +163,10 @@ export default function NewBusinessPage() {
                         </Link>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={!isValid || submitting}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading && <Loader2 className="animate-spin" size={18} />}
+                            {submitting && <Loader2 className="animate-spin" size={18} />}
                             <span>Crear Negocio</span>
                         </button>
                     </div>

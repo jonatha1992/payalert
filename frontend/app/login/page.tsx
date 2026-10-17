@@ -4,6 +4,9 @@ import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2, Mail, Lock } from 'lucide-react';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
+import { FormField } from '@/components/FormField';
 
 const loginErrors: Record<string, string> = {
     signup_not_allowed: 'Tu correo no está habilitado para crear una cuenta. Consultá con tu administrador.',
@@ -16,21 +19,21 @@ export default function LoginPage() {
 
 function LoginForm() {
     const searchParams = useSearchParams();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const loginForm = useFormValidation(validationSchemas.login, { email: '', password: '' });
+    const { values, change, errorFor, submit, isValid, submitting } = loginForm;
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
+        await submit(e, async (normalized) => {
         setLoading(true);
         setError(null);
 
         try {
             const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
+                email: normalized.email,
+                password: normalized.password,
             });
 
             if (error) throw error;
@@ -52,6 +55,7 @@ function LoginForm() {
         } finally {
             setLoading(false);
         }
+        });
     };
 
     const handleGoogleLogin = async () => {
@@ -100,44 +104,18 @@ function LoginForm() {
                         <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                     </div>
                     <form onSubmit={handleLogin} className="space-y-6">
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Mail className="h-5 w-5 text-gray-400" />
-                                </div>
-                                <input
-                                    id="email"
-                                    name="email"
-                                    type="email"
-                                    autoComplete="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    placeholder="usuario@ejemplo.com"
-                                    required
-                                />
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Mail className="h-5 w-5 text-gray-400" />
                             </div>
+                            <FormField label="Correo Electrónico" name="email" type="email" autoComplete="email" value={values.email} onChange={value => change('email', value)} onBlur={() => loginForm.blur('email')} error={errorFor('email')} placeholder="usuario@ejemplo.com" required className="pl-10" />
                         </div>
 
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contraseña</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-gray-400" />
-                                </div>
-                                <input
-                                    id="password"
-                                    name="password"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    placeholder="••••••••"
-                                    required
-                                />
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Lock className="h-5 w-5 text-gray-400" />
                             </div>
+                            <FormField label="Contraseña" name="password" type="password" autoComplete="current-password" value={values.password} onChange={value => change('password', value)} onBlur={() => loginForm.blur('password')} error={errorFor('password')} placeholder="••••••••" required className="pl-10" />
                         </div>
 
                         {error && (
@@ -148,7 +126,7 @@ function LoginForm() {
 
                         <button
                             type="submit"
-                            disabled={loading || googleLoading}
+                            disabled={!isValid || submitting || loading || googleLoading}
                             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {loading || googleLoading ? (
