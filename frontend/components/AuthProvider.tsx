@@ -88,7 +88,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(session?.user ?? null);
                 
                 if (session?.user) {
-                    await fetchProfile(session.user.id);
+                    // No esperar dentro del callback: supabase-js retiene un lock y la consulta se auto-bloquea.
+                    setTimeout(() => { void fetchProfile(session.user.id); }, 0);
                 } else {
                     setProfile(null);
                     setLoading(false);
