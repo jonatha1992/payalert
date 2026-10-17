@@ -33,10 +33,10 @@ export default function AdminLayout({
     if (profile?.role !== 'admin') return null;
 
     return (
-        <div className="flex min-h-screen flex-col md:flex-row bg-gray-50 dark:bg-gray-950">
+        <div className="flex min-h-screen min-w-0 bg-gray-50 dark:bg-gray-950">
             <AdminSidebar />
-            <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6 overflow-x-hidden">
-                <div className="max-w-7xl mx-auto">
+            <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 pt-16 md:p-6 md:pt-6">
+                <div className="w-full min-w-0 max-w-7xl mx-auto">
                     {children}
                 </div>
             </main>
