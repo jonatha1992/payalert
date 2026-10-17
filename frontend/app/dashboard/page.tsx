@@ -159,7 +159,7 @@ function EmployeeTerminal({ profile }: { profile: Profile }) {
     }, [myStores, audioEnabled]);
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-8 min-w-0 animate-in fade-in duration-500">
             {/* Notificación de pago entrante */}
             {showNotification && lastPayment && (
                 <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300">
@@ -340,8 +340,7 @@ function OwnerDashboard({ profile }: { profile: DashboardProfile }) {
     ];
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Cabecera */}
+        <div className="space-y-8 min-w-0 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -362,7 +361,7 @@ function OwnerDashboard({ profile }: { profile: DashboardProfile }) {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 min-w-0 gap-4 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
                 {dashboardStats.map((stat, i) => (
                     <div key={i} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start">
@@ -389,7 +388,7 @@ function OwnerDashboard({ profile }: { profile: DashboardProfile }) {
             </div>
 
             {/* Acciones Rápidas */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid min-w-0 grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700/50 shadow-sm overflow-hidden relative group">
                     <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl group-hover:bg-blue-500/10 transition-colors"></div>
                     

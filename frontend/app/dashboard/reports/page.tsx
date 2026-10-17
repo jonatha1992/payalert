@@ -243,7 +243,7 @@ export default function ReportsPage() {
 
         {showFilters && (
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
               {/* Fecha inicio */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -394,7 +394,7 @@ function OverviewTab({ data }: { data: ReportData }) {
   return (
     <div className="space-y-6">
       {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           title="Ingresos Totales"
           value={formatCurrency(data.summary.income)}
