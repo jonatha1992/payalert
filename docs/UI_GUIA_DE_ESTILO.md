@@ -9,7 +9,8 @@
 - Gutter de contenido: 1.25 rem móvil y 1.5 rem escritorio.
 - Padding de tarjeta: 1.25 rem móvil y 1.5 rem escritorio. Usar gap-4 por defecto; gap-6 para grupos principales.
 - Radios: tarjetas entre rounded-xl y rounded-2xl; controles rounded-lg/rounded-xl.
-- Sidebar: 14 rem en escritorio; en móvil se apila y ocupa el ancho disponible.
+- Sidebar: 14 rem expandido y 4 rem contraído en escritorio; en móvil funciona como drawer off-canvas con fondo y cierre por navegación o Escape.
+- En layouts flex/grid de dashboard y admin, usar `min-w-0` en cada contenedor que comparte ancho; en tarjetas KPI, 1 columna en móvil, 2 en tablet y ampliar a 4 en escritorio. Tablas anchas deben desplazarse dentro de su propio contenedor `overflow-x-auto`.
 
 ## Componentes y reglas
 - Mantener jerarquía de títulos, tarjetas, tablas, estados vacíos y botones compartidos entre dashboard y admin.
