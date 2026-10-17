@@ -251,54 +251,41 @@ export default function IntegrationsPage() {
     } finally { setSyncingId(null); }
   };
 
+  const mercadoPagoConnection = connections.find((connection) => connection.provider === "mercado_pago");
+  const mercadoPagoStatus = !mercadoPagoConnection ? "Sin conectar" : mercadoPagoConnection.status === "CONNECTED" ? "Conectado" : "Con problemas";
+  const mercadoPagoStatusClass = mercadoPagoStatus === "Conectado" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" : mercadoPagoStatus === "Con problemas" ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300";
+  const openManual = (provider: "mercado_pago" | "uala") => {
+    setWebhookUrl(`${window.location.origin}/api/webhooks/mercadopago`);
+    credentialForm.change("accessToken", "");
+    credentialForm.change("webhookSecret", "");
+    credentialForm.change("username", "");
+    credentialForm.change("clientId", "");
+    credentialForm.change("clientSecretId", "");
+    setSelectedProvider(provider);
+  };
+
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-        Integraciones
-      </h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {(["mercado_pago", "uala"] as const).map((provider) => (
-          <div
-            key={provider}
-            className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col justify-between"
-          >
-            <div>
-              <div
-                className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${provider === "mercado_pago" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" : "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400"}`}
-              >
-                {provider === "mercado_pago" ? (
-                  <Wallet size={24} />
-                ) : (
-                  <CreditCard size={24} />
-                )}
-              </div>
-              <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
-                {providerNames[provider]}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Conecta tu cuenta para recibir confirmaciones de pagos.
-              </p>
-            </div>
-            <button
-              disabled={loading}
-              onClick={() => {
-                setWebhookUrl(
-                  `${window.location.origin}/api/webhooks/mercadopago`,
-                );
-                credentialForm.change("accessToken", "");
-                credentialForm.change("webhookSecret", "");
-                credentialForm.change("username", "");
-                credentialForm.change("clientId", "");
-                credentialForm.change("clientSecretId", "");
-                setSelectedProvider(provider);
-              }}
-              className={`mt-6 w-full py-2 text-white rounded-lg font-medium transition-colors disabled:opacity-50 ${provider === "mercado_pago" ? "bg-blue-600 hover:bg-blue-700" : "bg-pink-600 hover:bg-pink-700"}`}
-            >
-              Agregar Cuenta
-            </button>
-            {provider === "mercado_pago" && <MercadoPagoOAuthConnect />}
-          </div>
-        ))}
+      <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Integraciones</h1>
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800 md:p-8" aria-labelledby="mp-title">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"><Wallet size={24} /></div><h2 id="mp-title" className="text-2xl font-bold text-gray-900 dark:text-white">Mercado Pago</h2></div>
+          <span className={`rounded-full px-3 py-1 text-sm font-medium ${mercadoPagoStatusClass}`}>{mercadoPagoStatus}</span>
+        </div>
+        <p className="mt-3 text-gray-600 dark:text-gray-300">Conectá tu cuenta para recibir confirmaciones de pagos.</p>
+        <ol className="mt-6 grid gap-3 sm:grid-cols-3">
+          {["Conectar", "Autorizar en Mercado Pago", "Listo"].map((step, index) => <li key={step} className="flex items-center gap-3 rounded-xl bg-gray-50 p-4 text-sm font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-200"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">{index + 1}</span>{step}</li>)}
+        </ol>
+        <button type="button" disabled={loading || process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED !== "true"} onClick={() => { if (process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED === "true") window.location.assign("/api/integrations/mercadopago"); }} className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">Conectar con Mercado Pago</button>
+        {process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED !== "true" ? <><p className="mt-3 text-center text-sm text-gray-600 dark:text-gray-400">Próximamente: estamos habilitando la conexión con un clic</p><button type="button" onClick={() => openManual("mercado_pago")} className="mx-auto mt-3 block text-sm font-medium text-blue-700 underline dark:text-blue-400">Conectar a mano (avanzado)</button></> : null}
+      </section>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400"><CreditCard size={24} /></div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Ualá Bis</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Pedile tus datos de conexión a Ualá Bis y cargalos acá.</p>
+          <button type="button" disabled={loading} onClick={() => openManual("uala")} className="mt-6 w-full rounded-lg bg-pink-600 py-3 font-medium text-white hover:bg-pink-700 disabled:opacity-50">Cargar datos de Ualá</button>
+        </section>
         {process.env.NODE_ENV !== "production" && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-700">
             <h3 className="font-semibold text-gray-800 dark:text-white">
