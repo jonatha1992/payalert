@@ -104,19 +104,9 @@ function LoginForm() {
                         <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                     </div>
                     <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <Mail className="h-5 w-5 text-gray-400" />
-                            </div>
-                            <FormField label="Correo Electrónico" name="email" type="email" autoComplete="email" value={values.email} onChange={value => change('email', value)} onBlur={() => loginForm.blur('email')} error={errorFor('email')} placeholder="usuario@ejemplo.com" required className="pl-10" />
-                        </div>
+                        <FormField label="Correo Electrónico" name="email" type="email" autoComplete="email" value={values.email} onChange={value => change('email', value)} onBlur={() => loginForm.blur('email')} error={errorFor('email')} placeholder="usuario@ejemplo.com" required icon={<Mail className="h-5 w-5" />} />
 
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <Lock className="h-5 w-5 text-gray-400" />
-                            </div>
-                            <FormField label="Contraseña" name="password" type="password" autoComplete="current-password" value={values.password} onChange={value => change('password', value)} onBlur={() => loginForm.blur('password')} error={errorFor('password')} placeholder="••••••••" required className="pl-10" />
-                        </div>
+                        <FormField label="Contraseña" name="password" type="password" autoComplete="current-password" value={values.password} onChange={value => change('password', value)} onBlur={() => loginForm.blur('password')} error={errorFor('password')} placeholder="••••••••" required icon={<Lock className="h-5 w-5" />} />
 
                         {error && (
                             <div role="alert" className="bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-start">
