@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { Loader2, Mail, Lock } from 'lucide-react';
 
 const loginErrors: Record<string, string> = {
-    signup_not_allowed: 'No autorizado: tu correo no está habilitado para crear una cuenta.',
-    oauth_callback_failed: 'No se pudo completar el inicio de sesión con Google. Inténtalo de nuevo.',
+    signup_not_allowed: 'Tu correo no está habilitado para crear una cuenta. Consultá con tu administrador.',
+    oauth_callback_failed: 'No pudimos completar el ingreso con Google. Probá de nuevo.',
 };
 
 export default function LoginPage() {
@@ -48,7 +48,7 @@ function LoginForm() {
                 window.location.href = '/dashboard';
             }
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.');
+            setError(err instanceof Error ? err.message : 'No pudimos iniciar sesión. Revisá tus datos e intentá de nuevo.');
         } finally {
             setLoading(false);
         }
@@ -62,7 +62,7 @@ function LoginForm() {
             options: { redirectTo: `${window.location.origin}/auth/callback` },
         });
         if (authError) {
-            setError('No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+            setError('No pudimos ingresar con Google. Probá de nuevo.');
             setGoogleLoading(false);
         }
     };
@@ -81,11 +81,24 @@ function LoginForm() {
                         type="button"
                         onClick={handleGoogleLogin}
                         disabled={googleLoading || loading}
-                        className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                        aria-label="Continuar con Google"
+                        className="w-full min-h-11 flex justify-center items-center gap-3 py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {googleLoading ? <Loader2 className="animate-spin h-5 w-5" /> : 'G'}
-                        Entrar con Google
+                        {googleLoading ? <Loader2 aria-hidden="true" className="animate-spin h-5 w-5" /> : (
+                            <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5 shrink-0">
+                                <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z" />
+                                <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.1c-1.8 1.2-4 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z" />
+                                <path fill="#FBBC05" d="M12.6 27.5a12 12 0 0 1 0-7v-5.3H5.8a20 20 0 0 0 0 17.6l6.8-5.3Z" />
+                                <path fill="#EA4335" d="M24 12.1c3 0 5.7 1 7.8 3.1l5.9-5.9C34.1 6.1 29.5 4 24 4A20 20 0 0 0 5.8 15.2l6.8 5.3c1.6-4.8 6.1-8.4 11.4-8.4Z" />
+                            </svg>
+                        )}
+                        {googleLoading ? 'Conectando con Google…' : 'Continuar con Google'}
                     </button>
+                    <div aria-hidden="true" className="my-6 flex items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                        <span>o</span>
+                        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                    </div>
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico</label>
@@ -128,7 +141,7 @@ function LoginForm() {
                         </div>
 
                         {error && (
-                            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-start">
+                            <div role="alert" className="bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-start">
                                 <span className="font-medium mr-1">Error:</span> {error}
                             </div>
                         )}
