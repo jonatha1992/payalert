@@ -5,6 +5,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Store, Plus, Loader2, MapPin, Phone, Trash2, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
+import { FormField } from '@/components/FormField';
 import Link from 'next/link';
 
 interface StoreData {
@@ -48,31 +51,30 @@ export default function StoresPage() {
     }, [profile]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newStore, setNewStore] = useState({ name: '', address: '', phone: '' });
-    const [createLoading, setCreateLoading] = useState(false);
+    const storeForm = useFormValidation(validationSchemas.store, { name: '', address: '', phone: '' });
+    const { values: newStore, change, errorFor, submit, isValid, submitting: createLoading } = storeForm;
 
     // ... (keep useEffect for fetchStores)
 
     const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
 
     const openEditModal = (store: StoreData) => {
-        setNewStore({ name: store.name, address: store.address, phone: store.phone });
+        change('name', store.name); change('address', store.address); change('phone', store.phone);
         setEditingStoreId(store.id);
         setIsModalOpen(true);
     };
 
     const handleSaveStore = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setCreateLoading(true);
+        await submit(e, async (normalized) => {
         try {
             if (editingStoreId) {
                 // Update existing
                 const { error } = await supabase
                     .from('stores')
                     .update({
-                        name: newStore.name,
-                        address: newStore.address,
-                        phone: newStore.phone,
+                        name: normalized.name,
+                        address: normalized.address ?? '',
+                        phone: normalized.phone ?? '',
                     })
                     .eq('id', editingStoreId);
                 
@@ -82,9 +84,9 @@ export default function StoresPage() {
                 // Create new
                 const { error } = await supabase.from('stores').insert([{
                     business_id: profile?.business_id,
-                    name: newStore.name,
-                    address: newStore.address,
-                    phone: newStore.phone,
+                    name: normalized.name,
+                    address: normalized.address ?? '',
+                    phone: normalized.phone ?? '',
                     is_active: true
                 }]);
 
@@ -94,14 +96,13 @@ export default function StoresPage() {
             
             fetchStores();
             setIsModalOpen(false);
-            setNewStore({ name: '', address: '', phone: '' });
+            change('name', ''); change('address', ''); change('phone', '');
             setEditingStoreId(null);
         } catch (error) {
             console.error(error);
             toast.error(editingStoreId ? 'Error al actualizar sucursal' : 'Error al crear sucursal');
-        } finally {
-            setCreateLoading(false);
         }
+        });
     };
 
     const handleDeleteStore = async (storeId: string) => {
@@ -138,7 +139,7 @@ export default function StoresPage() {
                 <button 
                     onClick={() => {
                         setEditingStoreId(null);
-                        setNewStore({ name: '', address: '', phone: '' });
+                        change('name', ''); change('address', ''); change('phone', '');
                         setIsModalOpen(true);
                     }}
                     className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95 font-medium"
@@ -166,7 +167,7 @@ export default function StoresPage() {
                     <button 
                          onClick={() => {
                             setEditingStoreId(null);
-                            setNewStore({ name: '', address: '', phone: '' });
+                            change('name', ''); change('address', ''); change('phone', '');
                             setIsModalOpen(true);
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg active:scale-95"
@@ -243,45 +244,10 @@ export default function StoresPage() {
                         </h2>
                         
                         <form onSubmit={handleSaveStore} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
-                                <input 
-                                    required
-                                    type="text" 
-                                    placeholder="Ej. Sucursal Centro"
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                    value={newStore.name}
-                                    onChange={e => setNewStore({...newStore, name: e.target.value})}
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Av. Principal 123"
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                    value={newStore.address}
-                                    onChange={e => setNewStore({...newStore, address: e.target.value})}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Teléfono</label>
-                                <input 
-                                    type="tel" 
-                                    placeholder="+54 9 11..."
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                    value={newStore.phone}
-                                    onChange={e => setNewStore({...newStore, phone: e.target.value})}
-                                />
-                            </div>
-
-                            <button 
-                                type="submit"
-                                disabled={createLoading}
-                                className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-blue-600/20"
-                            >
+                            <FormField label="Nombre" name="name" value={newStore.name} onChange={value => change('name', value)} onBlur={() => storeForm.blur('name')} error={errorFor('name')} maxLength={120} placeholder="Ej. Sucursal Centro" required />
+                            <FormField label="Dirección" name="address" value={newStore.address} onChange={value => change('address', value)} onBlur={() => storeForm.blur('address')} error={errorFor('address')} maxLength={255} placeholder="Av. Principal 123" />
+                            <FormField label="Teléfono (opcional)" name="phone" type="tel" value={newStore.phone} onChange={value => change('phone', value)} onBlur={() => storeForm.blur('phone')} error={errorFor('phone')} maxLength={24} placeholder="+54 9 11..." />
+                            <button type="submit" disabled={!isValid || createLoading} className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-blue-600/20">
                                 {createLoading ? <Loader2 className="animate-spin" /> : (editingStoreId ? 'Guardar Cambios' : 'Crear Sucursal')}
                             </button>
                         </form>
