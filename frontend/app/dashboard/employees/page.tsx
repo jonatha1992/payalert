@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, X, Mail, Lock, User } from 'lucide-react';
+import { Users, UserPlus, X } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
+import { FormField } from '@/components/FormField';
 
     interface Employee {
         id: string;
@@ -26,14 +29,8 @@ import { toast } from 'sonner';
         const [stores, setStores] = useState<Store[]>([]);
         const [loading, setLoading] = useState(true);
         const [isModalOpen, setIsModalOpen] = useState(false);
-        const [newEmployee, setNewEmployee] = useState({
-            first_name: '',
-            last_name: '',
-            email: '',
-            password: '',
-            assigned_store_id: ''
-        });
-        const [createLoading, setCreateLoading] = useState(false);
+        const employeeForm = useFormValidation(validationSchemas.employee, { first_name: '', last_name: '', email: '', password: '', assigned_store_id: '' });
+        const { values: newEmployee, change, errorFor, submit, isValid, submitting: createLoading } = employeeForm;
 
         useEffect(() => {
             if (profile?.business_id) {
@@ -67,30 +64,23 @@ import { toast } from 'sonner';
         const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
 
         const openEditModal = (emp: Employee) => {
-            setNewEmployee({
-                first_name: emp.first_name,
-                last_name: emp.last_name,
-                email: emp.email,
-                password: '',
-                assigned_store_id: emp.assigned_store_id || ''
-            });
+            change('first_name', emp.first_name); change('last_name', emp.last_name); change('email', emp.email);
+            change('password', ''); change('assigned_store_id', emp.assigned_store_id || '');
             setEditingEmployeeId(emp.id);
             setIsModalOpen(true);
         };
 
         const handleSaveEmployee = async (e: React.FormEvent) => {
-            e.preventDefault();
-            setCreateLoading(true);
-
+            await submit(e, async (normalized) => {
             try {
                 if (editingEmployeeId) {
                     // Update
                     const { error } = await supabase
                         .from('users')
                         .update({
-                            first_name: newEmployee.first_name,
-                            last_name: newEmployee.last_name,
-                            assigned_store_id: newEmployee.assigned_store_id || null
+                            first_name: normalized.first_name,
+                            last_name: normalized.last_name,
+                            assigned_store_id: normalized.assigned_store_id || null
                         })
                         .eq('id', editingEmployeeId);
 
@@ -99,12 +89,12 @@ import { toast } from 'sonner';
                 } else {
                     // Create
                     const { data: authData, error: authError } = await supabase.auth.signUp({
-                        email: newEmployee.email,
-                        password: newEmployee.password,
+                        email: normalized.email,
+                        password: normalized.password,
                         options: {
                             data: {
-                                first_name: newEmployee.first_name,
-                                last_name: newEmployee.last_name,
+                                first_name: normalized.first_name,
+                                last_name: normalized.last_name,
                                 role: 'employee',
                                 business_id: profile?.business_id
                             }
@@ -118,12 +108,12 @@ import { toast } from 'sonner';
                             .from('users')
                             .insert([{
                                 id: authData.user.id,
-                                email: newEmployee.email,
-                                first_name: newEmployee.first_name,
-                                last_name: newEmployee.last_name,
+                                email: normalized.email,
+                                first_name: normalized.first_name,
+                                last_name: normalized.last_name,
                                 role: 'employee',
                                 business_id: profile?.business_id,
-                                assigned_store_id: newEmployee.assigned_store_id || null, // New Field
+                                assigned_store_id: normalized.assigned_store_id || null, // New Field
                                 created_at: new Date().toISOString(),
                                 updated_at: new Date().toISOString()
                             }]);
@@ -135,15 +125,14 @@ import { toast } from 'sonner';
 
             await fetchEmployees();
             setIsModalOpen(false);
-            setNewEmployee({ first_name: '', last_name: '', email: '', password: '', assigned_store_id: '' });
+            change('first_name', ''); change('last_name', ''); change('email', ''); change('password', ''); change('assigned_store_id', '');
             setEditingEmployeeId(null);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error saving employee:', error);
-            toast.error(editingEmployeeId ? 'Error al actualizar: ' + error.message : 'Error al crear: ' + error.message);
-        } finally {
-            setCreateLoading(false);
+            toast.error(editingEmployeeId ? 'Error al actualizar: ' + (error instanceof Error ? error.message : 'Error desconocido') : 'Error al crear: ' + (error instanceof Error ? error.message : 'Error desconocido'));
         }
-    };
+            });
+        };
 
     return (
         <div className="space-y-6">
@@ -152,7 +141,7 @@ import { toast } from 'sonner';
                 <button 
                     onClick={() => {
                         setEditingEmployeeId(null);
-                        setNewEmployee({ first_name: '', last_name: '', email: '', password: '', assigned_store_id: '' });
+                        change('first_name', ''); change('last_name', ''); change('email', ''); change('password', ''); change('assigned_store_id', '');
                         setIsModalOpen(true);
                     }}
                     className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-lg shadow-blue-600/20 active:scale-95"
@@ -222,9 +211,9 @@ import { toast } from 'sonner';
                                                         if (error) throw error;
                                                         fetchEmployees();
                                                         toast.success('Empleado eliminado');
-                                                    } catch (err: any) {
+                                                    } catch (err: unknown) {
                                                         console.error(err);
-                                                        toast.error('Error al eliminar: ' + err.message);
+                                                        toast.error('Error al eliminar: ' + (err instanceof Error ? err.message : 'Error desconocido'));
                                                     }
                                                 }
                                             }}
@@ -256,68 +245,18 @@ import { toast } from 'sonner';
                         
                         <form onSubmit={handleSaveEmployee} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
-                                    <div className="relative">
-                                        <User size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                                        <input 
-                                            required
-                                            type="text" 
-                                            className="pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={newEmployee.first_name}
-                                            onChange={e => setNewEmployee({...newEmployee, first_name: e.target.value})}
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Apellido</label>
-                                    <input 
-                                        required
-                                        type="text" 
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                                        value={newEmployee.last_name}
-                                        onChange={e => setNewEmployee({...newEmployee, last_name: e.target.value})}
-                                    />
-                                </div>
+                                <FormField label="Nombre" name="first_name" value={newEmployee.first_name} onChange={value => change('first_name', value)} onBlur={() => employeeForm.blur('first_name')} error={errorFor('first_name')} maxLength={100} required />
+                                <FormField label="Apellido" name="last_name" value={newEmployee.last_name} onChange={value => change('last_name', value)} onBlur={() => employeeForm.blur('last_name')} error={errorFor('last_name')} maxLength={100} required />
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                                <div className="relative">
-                                    <Mail size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                                    <input 
-                                        required
-                                        type="email" 
-                                        disabled={!!editingEmployeeId}
-                                        className={`pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 ${editingEmployeeId ? 'bg-gray-100 dark:bg-gray-800 text-gray-500' : 'bg-gray-50 dark:bg-gray-900'}`}
-                                        value={newEmployee.email}
-                                        onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
-                                    />
-                                </div>
-                            </div>
-
-                            {!editingEmployeeId && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contraseña</label>
-                                    <div className="relative">
-                                        <Lock size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                                        <input 
-                                            required
-                                            type="password" 
-                                            className="pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={newEmployee.password}
-                                            onChange={e => setNewEmployee({...newEmployee, password: e.target.value})}
-                                        />
-                                    </div>
-                                </div>
-                            )}
+                            <FormField label="Email" name="email" type="email" value={newEmployee.email} onChange={value => change('email', value)} onBlur={() => employeeForm.blur('email')} error={errorFor('email')} disabled={!!editingEmployeeId} required />
+                            {!editingEmployeeId && <FormField label="Contraseña" name="password" type="password" value={newEmployee.password} onChange={value => change('password', value)} onBlur={() => employeeForm.blur('password')} error={errorFor('password')} autoComplete="new-password" required />}
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sucursal Asignada</label>
                                 <select
                                     className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
                                     value={newEmployee.assigned_store_id}
-                                    onChange={e => setNewEmployee({...newEmployee, assigned_store_id: e.target.value})}
+                                    onChange={e => change('assigned_store_id', e.target.value)}
                                 >
                                     <option value="">-- Sin asignar --</option>
                                     {stores.map(store => (
@@ -328,7 +267,7 @@ import { toast } from 'sonner';
 
                             <button 
                                 type="submit"
-                                disabled={createLoading}
+                                disabled={!isValid || createLoading}
                                 className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                             >
                                 {createLoading ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" /> : (editingEmployeeId ? 'Guardar Cambios' : 'Crear Empleado')}

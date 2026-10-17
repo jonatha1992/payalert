@@ -5,6 +5,9 @@ import { DollarSign, Plus, X, Calendar, MapPin, Tag } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
+import { FormField } from '@/components/FormField';
 
 interface Transaction {
     id: string;
@@ -27,14 +30,8 @@ export default function ExpensesPage() {
     const [stores, setStores] = useState<Store[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [createLoading, setCreateLoading] = useState(false);
-
-    const [newExpense, setNewExpense] = useState({
-        amount: '',
-        category: 'Insumos',
-        description: '',
-        store_id: ''
-    });
+    const expenseForm = useFormValidation(validationSchemas.expense, { amount: '', category: 'Insumos', description: '', store_id: '' });
+    const { values: newExpense, change, errorFor, submit, isValid, submitting: createLoading } = expenseForm;
 
     const CATEGORIES = ['Insumos', 'Mantenimiento', 'Salarios', 'Alquiler', 'Servicios', 'Otros'];
 
@@ -74,19 +71,17 @@ export default function ExpensesPage() {
     };
 
     const handleCreateExpense = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setCreateLoading(true);
-
+        await submit(e, async (normalized) => {
         try {
             const { error } = await supabase
                 .from('transactions')
                 .insert([{
                     business_id: profile?.business_id,
-                    store_id: newExpense.store_id || null, // Optional if generic expense
+                    store_id: normalized.store_id || null, // Optional if generic expense
                     type: 'expense',
-                    category: newExpense.category,
-                    description: newExpense.description,
-                    amount: parseFloat(newExpense.amount),
+                    category: normalized.category,
+                    description: normalized.description,
+                    amount: normalized.amount,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 }]);
@@ -95,14 +90,13 @@ export default function ExpensesPage() {
 
             toast.success('Gasto registrado exitosamente');
             setIsModalOpen(false);
-            setNewExpense({ amount: '', category: 'Insumos', description: '', store_id: '' });
+            change('amount', ''); change('category', 'Insumos'); change('description', ''); change('store_id', '');
             fetchData();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error creating expense:', error);
-            toast.error('Error al registrar gasto: ' + error.message);
-        } finally {
-            setCreateLoading(false);
+            toast.error('Error al registrar gasto: ' + (error instanceof Error ? error.message : 'Error desconocido'));
         }
+        });
     };
 
     const handleDeleteExpense = async (id: string) => {
@@ -113,7 +107,7 @@ export default function ExpensesPage() {
             if (error) throw error;
             toast.success('Gasto eliminado');
             fetchData();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
             toast.error('Error al eliminar gasto');
         }
@@ -216,34 +210,8 @@ export default function ExpensesPage() {
                         </h2>
                         
                         <form onSubmit={handleCreateExpense} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto</label>
-                                <div className="relative">
-                                    <DollarSign size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                                    <input 
-                                        required
-                                        type="number" 
-                                        min="0"
-                                        step="0.01"
-                                        className="pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-red-500"
-                                        value={newExpense.amount}
-                                        onChange={e => setNewExpense({...newExpense, amount: e.target.value})}
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
-                                <input 
-                                    required
-                                    type="text" 
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-red-500"
-                                    value={newExpense.description}
-                                    onChange={e => setNewExpense({...newExpense, description: e.target.value})}
-                                    placeholder="Ej: Compra de insumos limpieza"
-                                />
-                            </div>
+                            <FormField label="Monto" name="amount" type="number" value={newExpense.amount} onChange={value => change('amount', value)} onBlur={() => expenseForm.blur('amount')} error={errorFor('amount')} step="0.01" placeholder="0.00" required />
+                            <FormField label="Descripción" name="description" value={newExpense.description} onChange={value => change('description', value)} onBlur={() => expenseForm.blur('description')} error={errorFor('description')} maxLength={500} placeholder="Ej: Compra de insumos limpieza" required />
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -253,7 +221,7 @@ export default function ExpensesPage() {
                                         <select
                                             className="pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-red-500 appearance-none"
                                             value={newExpense.category}
-                                            onChange={e => setNewExpense({...newExpense, category: e.target.value})}
+                                            onChange={e => change('category', e.target.value)}
                                         >
                                             {CATEGORIES.map(cat => (
                                                 <option key={cat} value={cat}>{cat}</option>
@@ -268,7 +236,7 @@ export default function ExpensesPage() {
                                         <select
                                             className="pl-10 w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-red-500 appearance-none"
                                             value={newExpense.store_id}
-                                            onChange={e => setNewExpense({...newExpense, store_id: e.target.value})}
+                                            onChange={e => change('store_id', e.target.value)}
                                         >
                                             <option value="">General</option>
                                             {stores.map(store => (
@@ -281,7 +249,7 @@ export default function ExpensesPage() {
 
                             <button 
                                 type="submit"
-                                disabled={createLoading}
+                                disabled={!isValid || createLoading}
                                 className="w-full mt-6 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-red-600/20"
                             >
                                 {createLoading ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" /> : 'Registrar Gasto'}
