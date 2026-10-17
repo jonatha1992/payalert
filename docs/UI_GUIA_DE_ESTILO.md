@@ -16,4 +16,8 @@
 - Contenedores flex/grid deben permitir encogimiento (min-w-0); tablas anchas se envuelven con overflow-x-auto.
 - No aplicar escalado global en móvil ni deshabilitar zoom del navegador.
 - No mostrar un nombre vacío: usar first_name, email y luego un saludo neutro.
-- Preferir tokens globales (--ui-content-gutter, --ui-card-padding, --ui-radius) antes de introducir excepciones por pantalla.
+## Validación de formularios
+- Usar `useFormValidation` con un esquema de `frontend/lib/validation`; mostrar el error de un campo después del blur y validar todos al enviar.
+- Deshabilitar el envío si hay errores o una solicitud en curso; enviar siempre el valor normalizado que devuelve el esquema.
+- Representar inputs con `FormField`, incluyendo `maxLength`, `inputMode` y `step` adecuados; enlazar errores con `aria-invalid` y `aria-describedby`.
+- Los mensajes de validación se redactan en español rioplatense y los errores visuales usan los tonos rojos del sistema (`text-red-600`, `dark:text-red-400`, `border-red-500`).
