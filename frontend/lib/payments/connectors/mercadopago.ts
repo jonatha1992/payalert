@@ -34,9 +34,10 @@ export class MercadoPagoConnector implements PaymentConnector {
   }
 
   /** Uses the documented payment search endpoint; bounded to 24 hours and 100 results. */
-  async listRecentTransactions(connection: PaymentConnection) {
+  async listRecentTransactions(connection: PaymentConnection, since?: string) {
     const end = new Date();
-    const start = new Date(end.getTime() - 24 * 60 * 60_000);
+    const start = new Date(Math.max(since ? Date.parse(since) : end.getTime() - 24 * 60 * 60_000,
+      end.getTime() - 24 * 60 * 60_000));
     const params = new URLSearchParams({ sort: 'date_created', criteria: 'desc', range: 'date_created',
       begin_date: start.toISOString(), end_date: end.toISOString(), limit: '100' });
     const response = await this.fetchImpl(`https://api.mercadopago.com/v1/payments/search?${params}`, {
