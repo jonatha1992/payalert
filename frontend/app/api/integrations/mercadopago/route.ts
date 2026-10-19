@@ -29,7 +29,16 @@ function safeError(error: unknown) {
   return error instanceof Error ? error.message : "unknown";
 }
 
+export async function PUT(request: NextRequest) {
+  return handleCallback(request);
+}
+
 export async function GET(request: NextRequest) {
+  // Mercado Pago returns the browser here with ?code&state; that is the callback, not a new start.
+  const params = request.nextUrl.searchParams;
+  if (params.get("code") && params.get("state")) return handleCallback(request);
+  if (params.get("error"))
+    return NextResponse.redirect(new URL("/dashboard/integrations?oauth=failed", request.url));
   try {
     const profile = await getSessionProfile(request);
     if (!profile) throw new ScopeError("No autenticado", 401);
@@ -116,7 +125,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest) {
+async function handleCallback(request: NextRequest) {
   try {
     const profile = await getSessionProfile(request);
     if (!profile) throw new ScopeError("No autenticado", 401);
