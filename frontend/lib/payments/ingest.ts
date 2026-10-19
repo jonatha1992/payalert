@@ -1,4 +1,6 @@
 import { ProviderError } from './connectors/errors';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { reconcileDeviceNotificationHint } from './notificationHintReconciliation';
 import { asIdentifier, readWebhookBody } from './connectors/payload';
 import { matchTransaction, type MatchEvidence, type MatchResult } from './matching';
 import type { ExpectedPayment, ExpectedPaymentStatus, MovementStatus, NormalizedTransaction,
@@ -31,6 +33,8 @@ export interface PaymentAuditEntry {
 export type StatusTransitionPolicy = (previous: MovementStatus, next: MovementStatus) => boolean;
 
 export interface PaymentsRepository {
+  /** Database client is available to server adapters for hint reconciliation. */
+  db?: SupabaseClient;
   findConnectionByProviderAccount(provider: Provider, providerAccountId: string): Promise<PaymentConnection | null>;
   findConnectionByOrder(provider: Provider, providerOrderId: string): Promise<PaymentConnection | null>;
   findConnectionById(id: string): Promise<PaymentConnection | null>;
@@ -143,6 +147,7 @@ export async function ingestWebhook({
   let result: IngestResult;
   try {
     const persisted = await repo.upsertTransaction(connection.businessId, connection.storeId, tx, canTransitionStatus);
+    if (repo.db) await reconcileDeviceNotificationHint(repo.db, connection.businessId, tx);
     const changed = persisted.created || (persisted.previousStatus !== null && canTransitionStatus(persisted.previousStatus, tx.status));
     result = { httpStatus: 200, outcome: changed ? 'processed' : 'duplicate', transactionId: persisted.id };
     if (changed && tx.status === 'CONFIRMED') {
