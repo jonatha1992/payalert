@@ -10,8 +10,8 @@ Describir el comportamiento funcional comprobable del código y las fuentes pres
 
 ## Alcance
 
-- **Dentro:** sesión de usuario, conexiones Mercado Pago/Ualá disponibles en el código, salud de conexión, recepción/procesamiento asíncrono de webhooks, consulta de transacción al proveedor, persistencia idempotente, cobro esperado, matching, revisión, movimientos/reportes/CSV, preferencias de notificación y auditoría descritos en [02](02-requerimientos.md) y [PN1–PN6](README.md).
-- **Fuera/no comprometido:** capacidades enumeradas en [05](05-limites-del-sistema.md), entre ellas aplicación móvil nativa, API pública, email, proveedores no implementados y transferencia entrante general. La presencia de una tabla o de un ticket no constituye una funcionalidad de producto habilitada.
+- **Dentro:** sesión de usuario, conexiones Mercado Pago/Ualá disponibles en el código, salud de conexión, webhooks, consulta manual y automática de transacciones, renovación OAuth, transferencias comunes detectadas por consulta, aviso rápido Android como pista no confirmada, persistencia idempotente, cobro esperado, matching, revisión, movimientos/reportes/CSV, preferencias y auditoría descritos en [02](02-requerimientos.md) y [PN1–PN6](README.md).
+- **Fuera/no comprometido:** el listener móvil multiplataforma/iOS, promesa de detectar transferencias vía webhook, cadencia frecuente garantizada y las capacidades enumeradas en [05](05-limites-del-sistema.md), entre ellas API pública, email y proveedores no implementados. Un aviso móvil no es confirmación financiera. La presencia de tabla/ticket no habilita producto.
 
 ## Glosario
 

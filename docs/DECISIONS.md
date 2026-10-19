@@ -63,3 +63,10 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 ## 2026-10-18 — Ramas dev → test → main
 **Decisión:** se creó `test` y se renombró `master` a `main`. Los pushes solo generan deploys Preview; producción (`payalert-kappa`) se despliega a mano con la CLI.
+
+## 2026-10-19 — PAY-39: análisis funcional actualizado (transferencias y aviso del celular)
+
+**Contexto:** una transferencia real de $100 se detectó solo por consulta a Mercado Pago (`bank_transfer`); `webhook_events` quedó en 0. Además se agregó el aviso rápido desde el celular (PAY-38).
+**Decisión:** el análisis (`docs/analisis/`) documenta la sincronización como consulta autoritativa, el aviso del celular como pista sin confirmar (nunca suma en totales) y la exclusión de `money_transfer` + `account_money` como regla `[Inferido]` por pocos casos.
+**Pendientes:** cadencia y costo del disparador, prueba de PAY-38 en un Android real, bitácora de errores, cierre del registro abierto.
+**Ticket/commit:** PAY-36, PAY-38, PAY-39.

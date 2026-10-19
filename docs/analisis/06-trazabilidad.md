@@ -21,6 +21,11 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | RF-15 | 🟡 | CU-09 | No se encontró pantalla completa de auditoría | No se verificó ruta de lectura completa | `frontend/lib/server/audit.ts` | `frontend/tests/server/manualResolutionAudit.test.ts` | PAY-17 |
 | RF-16 | ✅ | CU-08 | `/dashboard/terminal` | `POST /api/dev/simulate-payment` | `frontend/app/api/dev/simulate-payment/route.ts`; `frontend/proxy.ts` | `frontend/tests/payments/connectors.test.ts` (mock) | PAY-9, PAY-12 |
 | RF-17 | ✅ | CU-04, CU-05 | `/dashboard/terminal` | expected-payments y candidates | `frontend/app/dashboard/terminal/page.tsx` | `frontend/tests/payments/matching.test.ts`; `frontend/tests/payments/ingest.test.ts` | PAY-16 |
+| RF-18 | ✅ | CU-11, CU-13 | integrations | `POST /api/integrations/{id}/sync` | `frontend/app/api/integrations/[id]/sync/route.ts`; `manualSync.ts`; `syncConnector.ts` | prueba específica pendiente | PAY-36 |
+| RF-19 | 🟡 | CU-12, CU-13 | N/A, disparador | `/api/internal/sync-connections` | `automaticSync.ts`; `tokenRefresh.ts` | listings test parcial; cron diario, latencia hasta 24h posible | PAY-36 |
+| RF-20 | 🟡 | CU-11, CU-08 | Android `payment-hints` | `POST /api/mobile/payment-hints` | handler, parser, servicio Kotlin | sin prueba en dispositivo | PAY-38 |
+| RF-21 | 🟡 | CU-11 | Android | conciliación al ingerir pago | `notificationHintReconciliation.ts` | sin aviso real; matching implementado | PAY-38 |
+| RF-22 | 🟡 | CU-13 | Integraciones / movimientos | Sync MP | `normalize.ts` | pocos escenarios de normalización | PAY-36 |
 | RNF-01 | 🟡 | CU-08 | rutas servidor | múltiples API | `frontend/lib/server/scope.ts`; `session.ts` | `frontend/tests/server/scope.test.ts` | PAY-12, PAY-17 |
 | RNF-02 | 🟡 | CU-01 | integraciones (sin secreto en UI) | integrations/OAuth | `frontend/lib/payments/secretBox.ts`; `connections.ts` | `frontend/tests/payments/secretBox.test.ts` | PAY-7, PAY-15 |
 | RNF-03 | ✅ | CU-03 | N/A | webhook/worker | `frontend/lib/payments/ingest.ts` | `frontend/tests/integration/paymentsPipeline.test.ts` | PAY-14 |
@@ -31,8 +36,15 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | RNF-08 | 🟡 | CU-03 | N/A | webhook ACK + worker | `frontend/lib/server/webhookHandler.ts` | `frontend/tests/server/webhookHandler.test.ts` | PAY-14 |
 | RNF-09 | 🟡 | CU-03/06 | N/A | rutas con wrapper aplicable | `frontend/lib/security/rateLimiter.ts`; `withRateLimit.ts`; migración 011 (RPC `rate_limit_hit`, fallback memoria) | [Pendiente: validación de entorno staging/cobertura] | PAY-14 |
 | RNF-10 | 🟡 | CU-08 | UI auth | API interna | `frontend/lib/server/session.ts`; `frontend/proxy.ts` | `frontend/tests/server/scope.test.ts` | PAY-17 |
+| RNF-11 | 🟡 | CU-12 | N/A | `/api/internal/sync-connections` | `automaticSync.ts`; `vercel.json` | ejecución del cron/frecuencia real pendiente | PAY-36 |
+| RNF-12 | 🟡 | CU-11 | Android | servicio nativo | `PayAlertNotificationListenerService.kt`; `mobile/app/payment-hints.tsx` | no existe prueba dispositivo | PAY-38 |
 
-## Casos de uso y vínculo con tickets
+### Tickets recientes
+
+| Ticket | Estado | Requisitos | Alcance | Evidencia y pendiente |
+|---|---|---|---|---|
+| PAY-36 | 🟡 | RF-18/RF-19/RF-22; CU-11..13 | Sync manual/automática, detección de transferencias | Código y prueba reportada $100/0 webhooks; cadencia diaria y cobertura representativa pendientes |
+| PAY-38 | 🟡 | RF-20/RF-21; CU-11 | Pista Android conciliable | Backend/app presentes; sin prueba dispositivo/aviso real |
 
 | CU | Proceso | RF | Tickets asociados |
 |---|---|---|---|
@@ -46,5 +58,8 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | CU-08 | PN6 | RF-01, RF-02, RF-08, RF-10, RF-16 | PAY-17 |
 | CU-09 | PN6 | RF-15 | PAY-17 |
 | CU-10 | PN2 | RF-07, RF-15 | PAY-14 |
+| CU-11 | PN2/PN5 | RF-18, RF-20, RF-21 | PAY-36, PAY-38 |
+| CU-12 | PN2 | RF-19 | PAY-36 |
+| CU-13 | PN1/PN2 | RF-18, RF-19, RF-22 | PAY-36 |
 
 Los tickets PAY-8 a PAY-12 son principalmente despliegue, aceptación o validación externa; se evalúan en [07](07-redundancias-y-viabilidad.md), no se convierten en requisito funcional sin aprobación.

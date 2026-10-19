@@ -24,6 +24,8 @@ Definiciones únicas de restricciones e invariantes verificadas en implementaci�
 | RN-18 | `users.business_id` representa un negocio por usuario en esquema actual. Membership multiempresa requiere decisión y migración no existente en el código verificado. | `docs/database_schema.sql`; `docs/adr/ADR-002-multiempresa-memberships.md`; código de `frontend/lib/server/session.ts`. |
 | RN-19 | Cobertura de Ualá v2 es orden/checkout consultable, no afirmación de que toda transferencia entrante a CVU/CBU esté soportada. | `frontend/lib/payments/connectors/uala.ts`; `docs/providers/uala.md`; Jira PAY-11. |
 | RN-20 | Mantener datos/payloads sensibles fuera de logs de cola/auditoría; usar código de error seguro y evidencia de matching no sensible. | `frontend/lib/server/webhookQueue.ts`; `frontend/lib/server/audit.ts`; `frontend/lib/payments/matching.ts`; `docs/migrations/008_pay16_match_evidence.sql`. |
+| RN-21 | Omitir movimiento MP `money_transfer` + `account_money` del flujo contabilizado y presentar la descripción `Bank Transfer` como `Transferencia recibida`. `[Inferido]` La regla se formaliza a partir del comportamiento observado y pocos casos; validar con diversidad de movimientos reales. | `frontend/lib/payments/normalize.ts`; `frontend/tests/payments/normalize.test.ts`; commit `d1384b9`. |
+| RN-22 | Un aviso de dispositivo con `device_notification` y estado pendiente no equivale a pago confirmado ni debe contar en ventas/totales; solo el servidor determina confirmación. | `frontend/app/api/mobile/payment-hints/route.ts`; `frontend/lib/payments/notificationHintReconciliation.ts`; `frontend/app/api/stats/dashboard/route.ts` excluye `status=pending`; `docs/mobile/NOTIFICATION_HINTS.md`. |
 
 ## Estados como vocabulario de dominio
 

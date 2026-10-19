@@ -28,5 +28,11 @@
 24. **[Inferido]** “PayWatch” representa una futura alternativa/replatform, no un nuevo producto aprobado; confirmar nomenclatura final y si el análisis debe orientar solo a PayAlert.
 25. **[Pendiente]** Revisar estado Jira de tickets PAY-7..PAY-29 antes de un plan de ejecución: los resultados consultados muestran todos con estado “Tareas por hacer” aunque algunos comentarios afirman Done; este documento conserva la distinción entre comentario, código y staging.
 26. **[Pendiente]** Autorizar consolidaciones propuestas en 00/07: elegir RBAC como autoridad, revisar auth/scope repetido, cifrado de scripts frente a secretBox, tipos/helpers duplicados y baseline SQL; este reporte no modifica código ni fuentes existentes.
-27. **[Pendiente]** Corregir en un paso posterior los defectos visuales de los diagramas class, architecture, deployment, actividad y ER; documentados en [04](04-diagramas.md). Los diagramas no se modifican en esta actualización.
-28. **[Pendiente]** Incorporar al análisis los informes de investigación de PAY-11, PAY-21 y PAY-22 que están preparándose bajo `docs/investigacion/`; aún no están disponibles para esta actualización.
+27. **[Pendiente]** Corregir en un paso posterior defectos visuales de diagramas class, architecture, deployment, actividad y ER; ver [04](04-diagramas.md). Este cambio agrega y revisa el diagrama PAY-36, no corrige los anteriores.
+32. **[Pendiente]** Decidir frecuencia/disparador de sincronización: cron diario implica hasta 24 h; valorar cron frecuente o externo, costo, seguridad y SLO. PAY-36, [05](05-limites-del-sistema.md).
+33. **[Inferido]** Validar con operaciones variadas exclusión `money_transfer` + `account_money` y etiqueta `Bank Transfer` → «Transferencia recibida»; cobertura escasa. RN-21.
+34. **[Pendiente]** Probar PAY-38 en Android físico con avisos reales/falsos, offline/reintento, permiso revocado y batería; no asegurar captura fiable sin prueba. [PN2 CU-11](PN2-pagos-entrantes.md#cu-11--aviso-rápido-del-celular-android).
+35. **[Pendiente]** Decidir restricción de registro OAuth Google; verificar `ALLOWED_SIGNUP_EMAILS`; allowlist vacía permite altas abiertas. `frontend/lib/server/bootstrapOwner.ts`.
+36. **[Pendiente]** Aprobar/rechazar bitácora persistente de errores (redacción, retención, permisos); `manualSync` retorna `ingest_error` sin conservar detalle, no hay `error_log` verificado.
+37. **[Pendiente]** Confirmar que dashboard/reportes no cuenten `device_notification` pendiente como ingreso.
+**[Pendiente]** Verificar OAuth GET, región `auth.mercadopago.com.ar`, firma MP común por app y rotación en staging sin exponer valores.

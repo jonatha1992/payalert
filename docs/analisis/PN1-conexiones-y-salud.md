@@ -33,5 +33,14 @@
 - **Cumple:** RF-04; RN-01, RN-02, RN-09, RN-20.
 - **Relaciones UML:** CU-01 «include» CU-02 solo si el flujo de conexión solicita health-check; consulta independiente de lo contrario.
 
-### Evidencia
+## CU-03 — Sincronizar movimientos por consulta
+
+- **Actores:** ACT-01 dueño / ACT-02 manager autorizado para acción manual; proceso interno para sincronización automática; EXT-01 Mercado Pago.
+- **Precondiciones:** conexión MP activa y credencial válida; OAuth callback GET bajo `auth.mercadopago.com.ar` completado para conexión OAuth.
+- **Flujo principal:** manual: actor usa `POST /api/integrations/{id}/sync`. Automática: disparador protegido llama `/api/internal/sync-connections` con `CRON_SECRET`. El servidor renueva token OAuth próximo a vencer, consulta pagos recientes y aplica ingestión idempotente.
+- **Alternativos:** permiso/secreto inválido → no consultar; refresh inválido → requerir reautorización; error consulta/ingestión → devolver resultado seguro y mantener error genérico cuando no hay bitácora detallada.
+- **Límite:** las transferencias comunes CVU/alias no generan IPN/webhook; detección por consulta a `/v1/payments/search` únicamente. Véase [PN2](PN2-pagos-entrantes.md) y [05](05-limites-del-sistema.md).
+- **Cumple:** RF-18/RF-19; RN-21.
+
+## Estados de conexión
 `frontend/app/dashboard/integrations/page.tsx`, `frontend/app/api/integrations/route.ts`, `frontend/app/api/integrations/[id]/route.ts`, `frontend/app/api/integrations/[id]/health/route.ts`, `frontend/app/api/integrations/mercadopago/route.ts`, `frontend/lib/server/connections.ts`, `frontend/lib/payments/connectionHealth.ts`, pruebas `frontend/tests/payments/connectionHealth.test.ts` y `frontend/tests/payments/mercadopagoOAuth.test.ts`.

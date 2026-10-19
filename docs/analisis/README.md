@@ -12,7 +12,7 @@
 | 4 | [03-reglas-de-negocio.md](03-reglas-de-negocio.md) | Invariantes y restricciones |
 | 5 | [04-diagramas.md](04-diagramas.md) | Catálogo UML, fuentes/PNG y limitaciones visuales |
 | 6 | [PN1-conexiones-y-salud.md](PN1-conexiones-y-salud.md) | Conexión de cuentas y diagnóstico |
-| 7 | [PN2-pagos-entrantes.md](PN2-pagos-entrantes.md) | Webhooks, cola, ingestión y aviso |
+7 | [PN2-pagos-entrantes.md](PN2-pagos-entrantes.md) | Webhooks, consulta, cola, ingestión, transferencias y aviso rápido |
 | 8 | [PN3-cobros-esperados.md](PN3-cobros-esperados.md) | Creación, matching y resolución en caja |
 | 9 | [PN4-reportes-y-movimientos.md](PN4-reportes-y-movimientos.md) | Dashboard, movimientos, reportes y exportación |
 | 10 | [PN5-notificaciones.md](PN5-notificaciones.md) | Push y preferencias |

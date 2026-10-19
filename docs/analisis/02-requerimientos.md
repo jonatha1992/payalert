@@ -23,6 +23,11 @@ IDs únicos y verificables. La definición vive aquí; el estado de cada requisi
 | RF-15 | Registrar acciones sensibles de negocio con actor/acción/entidad y permitir lectura autorizada de auditoría. | `frontend/lib/server/audit.ts`; `frontend/lib/server/rbac.ts`; `docs/migrations/007_pay17_rbac_audit.sql`; PAY-17 |
 | RF-16 | Simular un pago solo en entorno/despliegue de desarrollo habilitado y con permiso; no habilitarlo en producción. | `frontend/app/api/dev/simulate-payment/route.ts`; `frontend/app/dashboard/terminal/page.tsx`; `frontend/proxy.ts` |
 | RF-17 | Exponer la resolución/manual review de cobros esperados en la UI de terminal a los perfiles permitidos. | `frontend/app/dashboard/terminal/page.tsx`; rutas RF-08/RF-10; PAY-16 |
+| RF-18 | Permitir que actor autorizado solicite sincronización manual de una conexión e ingerir resultados idempotentemente, registrando último chequeo. | `frontend/app/api/integrations/[id]/sync/route.ts`; `frontend/lib/payments/manualSync.ts`; `frontend/lib/payments/syncConnector.ts` |
+| RF-19 | Ejecutar sincronización automática de conexiones MP activas en endpoint protegido por `CRON_SECRET`, con máximo 20 conexiones por corrida y presupuesto 45 s. | `frontend/app/api/internal/sync-connections/route.ts`; `frontend/lib/payments/automaticSync.ts`; `frontend/lib/payments/tokenRefresh.ts` |
+| RF-20 | Recibir avisos rápidos Android como pistas pendientes, autorizadas por servidor y deduplicadas por negocio/clave derivada; no tratarlas como prueba financiera. | `frontend/app/api/mobile/payment-hints/route.ts`; `frontend/lib/payments/notificationParser.ts`; `frontend/lib/payments/notificationHintReconciliation.ts`; servicio Android `mobile/modules/notification-listener/android/src/main/java/com/tecnofusion/payalert/notifications/PayAlertNotificationListenerService.kt` |
+| RF-21 | Conciliar pista móvil solo ante pago MP confirmado `bank_transfer`, importe exacto, ventana ±10 minutos y exactamente un candidato pendiente. | `frontend/lib/payments/notificationHintReconciliation.ts`; `frontend/lib/payments/ingest.ts` |
+
 
 ## Requerimientos no funcionales
 
@@ -37,7 +42,9 @@ IDs únicos y verificables. La definición vive aquí; el estado de cada requisi
 | RNF-07 | Los fallos de proveedor y permisos se traducen a respuestas/diagnósticos sin revelar credenciales ni información de otro tenant. | `frontend/lib/payments/connectionHealth.ts`; `frontend/lib/server/session.ts`; `frontend/lib/server/connections.ts` |
 | RNF-08 | Operación pública de webhook confirma recepción rápidamente al encolar, no bloqueada por llamadas proveedor/push; la entrega efectiva y objetivo de latencia requieren validación de despliegue. | `frontend/lib/server/webhookHandler.ts`; PAY-14; `[Pendiente]` evidencia de staging y SLO aprobado. |
 | RNF-09 | La protección distribuida entre instancias usa RPC Supabase `rate_limit_hit` con fallback en memoria; despliegue/configuración y comportamiento ante fallos deben validarse en staging. | `frontend/lib/security/rateLimiter.ts`; `frontend/lib/security/withRateLimit.ts`; `docs/migrations/011_pay14_rate_limit.sql`; PAY-14 |
-| RNF-10 | Las rutas usan sesión protegida por cookies/refresh configurado en proxy; no documentar API pública autenticada por Bearer si no existe contrato implementado. | `frontend/lib/server/session.ts`; `frontend/proxy.ts`; contraste con `docs/API_Documentation.md` |
+| RNF-10 | Las rutas usan sesión protegida por cookies/refresh configurado en proxy; no documentar API pública autenticada por Bearer si no existe contrato implementado. | `frontend/lib/server/session.ts`; `frontend/proxy.ts` |
+| RNF-11 | La sincronización automática limita lote a 20 conexiones y presupuesto de ejecución a 45 s; frecuencia y latencia efectiva dependen del disparador configurado. | `frontend/app/api/internal/sync-connections/route.ts`; `frontend/lib/payments/automaticSync.ts`; `vercel.json` |
+| RNF-12 | El listener Android filtra el paquete MP permitido y limita la cola nativa local a 100 avisos; fiabilidad del servicio en dispositivo no se garantiza sin prueba física. | `mobile/modules/notification-listener/android/src/main/java/com/tecnofusion/payalert/notifications/PayAlertNotificationListenerService.kt`; `mobile/README.md` |
 
 ## Trazabilidad
 
