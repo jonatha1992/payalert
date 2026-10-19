@@ -23,5 +23,5 @@ export default function RootLayout() {
     if (signedIn && authRoute) router.replace('/');
   }, [ready, signedIn, segments, router]);
   if (!ready) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
-  return <SafeAreaProvider><StatusBar style="auto" /><Tabs screenOptions={{ headerShown: true }}><Tabs.Screen name="(tabs)" options={{ href: null }} /><Tabs.Screen name="index" options={{ title: 'Inicio' }} /><Tabs.Screen name="notifications" options={{ title: 'Notificaciones' }} /><Tabs.Screen name="(auth)" options={{ href: null }} /></Tabs></SafeAreaProvider>;
+  return <SafeAreaProvider><StatusBar style="auto" /><Tabs screenOptions={{ headerShown: true }}><Tabs.Screen name="(tabs)" options={{ href: null }} /><Tabs.Screen name="index" options={{ title: 'Inicio' }} /><Tabs.Screen name="notifications" options={{ title: 'Notificaciones' }} /><Tabs.Screen name="payment-hints" options={{ title: 'Avisos del celular' }} /><Tabs.Screen name="(auth)" options={{ href: null }} /></Tabs></SafeAreaProvider>;
 }

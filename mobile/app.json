@@ -9,6 +9,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "./modules/notification-listener/withNotificationListener",
       [
         "expo-notifications",
         {
