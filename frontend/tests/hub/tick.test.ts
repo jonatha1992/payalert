@@ -7,7 +7,7 @@ vi.mock('@/lib/server/session', () => ({
     const queryState = { status: '', synced: '', pending: false };
     const query = {
       select: () => query,
-      eq: (key: string, value: string) => { if (key === 'status') queryState.status = value; if (key === 'firestore_synced') queryState.synced = value; return query; },
+      eq: (key: string, value: unknown) => { if (key === 'status') queryState.status = String(value); if (key === 'firestore_synced') queryState.synced = String(value); return query; },
       lt: () => { queryState.pending = true; return query; },
       in: () => query,
       order: () => query,
@@ -16,14 +16,14 @@ vi.mock('@/lib/server/session', () => ({
         state.pages += 1;
         const status = state.currentStatus || 'approved';
         const rows = [{ id: 'charge-' + state.pages, booking_id: 'booking-1', status, client_apps: { id: 'app' } }];
-        if (queryState.synced === 'false' && state.pages === 1) return { data: [{ ...rows[0], status: state.currentStatus || 'needs_refund' }], error: null };
+        if (queryState.synced === 'false' && state.pages === 1) return { data: Array.from({ length: state.retryRows ? 100 : 1 }, (_, index) => ({ ...rows[0], id: 'charge-' + index, status: state.currentStatus || 'needs_refund' })), error: null };
         return { data: [], error: null };
       },
-      update: (data: unknown) => { state.updated.push(data); return { eq: async () => ({ error: null }) }; },
+      update: (data: unknown) => { state.updated.push(data); const result = { error: null, eq: () => result, then: (resolve: (value: { error: null }) => void) => resolve({ error: null }) }; return result; },
     };
     return query;
   } }) }));
-vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ firestore: { runTransaction: async (fn: (transaction: { get: (ref: unknown) => Promise<{ exists: boolean; data: () => { status: string } }>; update: (ref: unknown, data: unknown) => void; delete: (_ref: never) => void }) => Promise<unknown>) => fn({ get: async (ref) => ref && typeof ref === 'object' && 'where' in ref ? ({ docs: [{ ref: { id: 'owned-slot' }, data: () => ({ bookingId: 'booking-1' }) }, { ref: { id: 'foreign-slot' }, data: () => ({ bookingId: 'booking-2' }) }] } as never) : ({ exists: true, data: () => ({ status: state.bookingStatus }) }), update: (_ref, data) => { state.updated.push(data); }, delete: (_ref: never) => { state.deleted.push({ id: 'slot-1' }); } }), collection: (name: string) => name === 'bookings' ? { doc: (id: string) => ({ id, get: async () => ({ exists: true, data: () => ({ status: state.bookingStatus }) }) }) } : { where: () => ({}) } } }) }));
+vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ firestore: { runTransaction: async (fn: (transaction: { get: (ref: unknown) => Promise<{ exists: boolean; data: () => { status: string } }>; update: (ref: unknown, data: unknown) => void; delete: (_ref: never) => void }) => Promise<unknown>) => fn({ get: async (ref) => ref && typeof ref === 'object' && 'where' in ref ? ({ docs: [{ ref: { id: 'owned-slot' }, data: () => ({ bookingId: 'booking-1' }) }, { ref: { id: 'foreign-slot' }, data: () => ({ bookingId: 'booking-2' }) }] } as never) : ({ exists: true, data: () => ({ status: state.bookingStatus }) }), update: (_ref, data) => { state.updated.push(data); }, delete: (_ref: never) => { state.deleted.push({ id: 'slot-1' }); } }), collection: (name: string) => name === 'bookings' ? { doc: (id: string) => ({ id, get: async () => ({ exists: true, data: () => ({ status: state.bookingStatus }) }) }) } : { where: () => ({ where: 'slots-query' }) } } }) }));
 vi.mock('@/lib/server/hubCharges', () => ({ transitionCharge: vi.fn(async (_id: string, from: string, to: string, patch: unknown) => { state.updated.push(patch); if (state.currentStatus === 'pending') return state.transitionResult ? { id: 'charge-1', status: to } : null; return { id: 'charge-1', status: to }; }) }));
 import { POST } from '@/app/api/internal/hub-tick/route';
 const req = (secret: string) => new NextRequest('https://api.test/api/internal/hub-tick', { method: 'POST', headers: { 'x-hub-cron-secret': secret } });
