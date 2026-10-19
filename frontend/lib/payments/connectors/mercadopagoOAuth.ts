@@ -5,7 +5,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-export const MP_OAUTH_SCOPES = "offline_access read";
+export const MP_OAUTH_SCOPES = process.env.MP_OAUTH_SCOPES ?? "offline_access read write";
 export const MP_AUTHORIZATION_URL =
   "https://auth.mercadopago.com/authorization";
 export const MP_TOKEN_URL = "https://api.mercadopago.com/oauth/token";

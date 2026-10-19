@@ -64,7 +64,7 @@ describe("Mercado Pago OAuth", () => {
       "https://auth.mercadopago.com/authorization",
     );
     expect(url.searchParams.get("redirect_uri")).toBe(config.redirectUri);
-    expect(url.searchParams.get("scope")).toBe("offline_access read");
+    expect(url.searchParams.get("scope")).toBe("offline_access read write");
     const call = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(JSON.stringify(tokens), { status: 200 }));
