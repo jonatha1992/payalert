@@ -65,3 +65,17 @@ describe('payment normalization', () => {
       expect(() => normalizeUalaOrder(value)).toThrow();
     });
 });
+
+describe('movimientos internos de Mercado Pago', () => {
+  it('detecta el espejo interno money_transfer/account_money y no el ingreso por CVU', async () => {
+    const { isInternalMercadoPagoMovement } = await import('@/lib/payments/normalize');
+    expect(isInternalMercadoPagoMovement({ operation_type: 'money_transfer', payment_type_id: 'account_money' })).toBe(true);
+    expect(isInternalMercadoPagoMovement({ operation_type: 'account_fund', payment_type_id: 'bank_transfer' })).toBe(false);
+    expect(isInternalMercadoPagoMovement({ operation_type: 'regular_payment', payment_type_id: 'credit_card' })).toBe(false);
+  });
+
+  it('muestra "Bank Transfer" en español', async () => {
+    const { normalizeMercadoPagoPayment } = await import('@/lib/payments/normalize');
+    expect(normalizeMercadoPagoPayment({ id: 1, transaction_amount: 100, description: 'Bank Transfer' }).description).toBe('Transferencia recibida');
+  });
+});

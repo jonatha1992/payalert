@@ -30,6 +30,17 @@ function statusFor(status: unknown, statuses: Record<string, MovementStatus>): M
   return typeof status === 'string' && Object.hasOwn(statuses, status) ? statuses[status] : 'UNKNOWN';
 }
 
+/** Movimiento interno de saldo (account_money -> account_money): no es una venta ni un ingreso nuevo. */
+export function isInternalMercadoPagoMovement(payment: unknown): boolean {
+  const source = record(payment);
+  return source.operation_type === 'money_transfer' && source.payment_type_id === 'account_money';
+}
+
+const mercadoPagoDescriptions: Record<string, string> = { 'Bank Transfer': 'Transferencia recibida' };
+function mercadoPagoDescription(value: string | null): string | null {
+  return value && Object.hasOwn(mercadoPagoDescriptions, value) ? mercadoPagoDescriptions[value] : value;
+}
+
 export function normalizeMercadoPagoPayment(payment: unknown): NormalizedTransaction {
   const source = record(payment);
   const externalId = identifier(source.id);
@@ -49,7 +60,7 @@ export function normalizeMercadoPagoPayment(payment: unknown): NormalizedTransac
     occurredAt: text(source.date_approved) ?? text(source.date_created) ?? '',
     payerName, payerIdentifier: identificationType && identificationNumber
       ? `${identificationType} ${identificationNumber}` : null,
-    description: text(source.description), externalReference: text(source.external_reference),
+    description: mercadoPagoDescription(text(source.description)), externalReference: text(source.external_reference),
     raw: pick(source, ['id', 'status', 'status_detail', 'payment_method_id', 'payment_type_id',
       'operation_type', 'date_created', 'date_approved', 'live_mode']),
   };
