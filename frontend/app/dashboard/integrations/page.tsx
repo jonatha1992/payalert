@@ -2,7 +2,8 @@
 
 import { MercadoPagoOAuthConnect } from "./MercadoPagoOAuthConnect";
 import { useState, useEffect } from "react";
-import { CreditCard, Wallet, X, MapPin, Trash2 } from "lucide-react";
+import { X, MapPin, Trash2 } from "lucide-react";
+import ProviderLogo from "@/components/ProviderLogo";
 import { useFormValidation } from "@/hooks/useFormValidation";
 import { FormField } from "@/components/FormField";
 import { integrationCredentialSchemas } from "@/lib/validation/integrations";
@@ -68,7 +69,7 @@ function ProviderCard({ title, icon, status, statusClassName, description, steps
     <section className="flex min-w-0 flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">{icon}</div>
+          {icon}
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusClassName}`}>{status}</span>
@@ -297,11 +298,11 @@ export default function IntegrationsPage() {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Integraciones</h1>
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-        <ProviderCard title="Mercado Pago" icon={<Wallet size={20} />} status={mercadoPagoStatus} statusClassName={mercadoPagoStatusClass} description="Conectá tu cuenta para recibir confirmaciones de pagos." steps={["Conectar", "Autorizar en Mercado Pago", "Listo"]}>
+        <ProviderCard title="Mercado Pago" icon={<ProviderLogo provider="mercadopago" />} status={mercadoPagoStatus} statusClassName={mercadoPagoStatusClass} description="Conectá tu cuenta para recibir confirmaciones de pagos." steps={["Conectar", "Autorizar en Mercado Pago", "Listo"]}>
           <button type="button" disabled={loading || process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED !== "true"} onClick={() => { if (process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED === "true") window.location.assign("/api/integrations/mercadopago"); }} className="h-11 w-full rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none dark:disabled:bg-gray-700 dark:disabled:text-gray-400">Conectar con Mercado Pago</button>
           {process.env.NEXT_PUBLIC_MP_OAUTH_ENABLED !== "true" ? <><span className="mt-2 block text-center text-xs text-gray-600 dark:text-gray-400">Próximamente</span><button type="button" onClick={() => openManual("mercado_pago")} className="mx-auto mt-2 block text-sm font-medium text-blue-700 underline dark:text-blue-400">Conectar a mano (avanzado)</button></> : null}
         </ProviderCard>
-        <ProviderCard title="Ualá Bis" icon={<CreditCard size={20} />} status="Disponible" statusClassName="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" description="Conectá Ualá Bis cargando los datos de tu cuenta." steps={["Pedí tus datos a Ualá Bis", "Cargalos acá"]}>
+        <ProviderCard title="Ualá Bis" icon={<ProviderLogo provider="uala" />} status="Disponible" statusClassName="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" description="Conectá Ualá Bis cargando los datos de tu cuenta." steps={["Pedí tus datos a Ualá Bis", "Cargalos acá"]}>
           <button type="button" disabled={loading} onClick={() => openManual("uala")} className="h-11 w-full rounded-lg bg-pink-600 px-4 text-sm font-semibold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-50">Cargar datos de Ualá</button>
         </ProviderCard>
         {process.env.NODE_ENV !== "production" && (
