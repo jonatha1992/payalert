@@ -39,7 +39,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
+        let inFlightFor: string | null = null;
         const fetchProfile = async (userId: string, email?: string) => {
+            // getSession() e INITIAL_SESSION disparan esto a la vez; una sola consulta por usuario.
+            if (inFlightFor === userId) return;
+            inFlightFor = userId;
             console.log('[Auth] Fetching profile for:', userId);
             try {
                 const { data, error } = await supabase
@@ -65,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 
                 setProfile(null);
             } finally {
+                inFlightFor = null;
                 setLoading(false);
             }
         };
