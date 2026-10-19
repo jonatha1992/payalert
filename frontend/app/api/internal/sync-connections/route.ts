@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runAutomaticSync, type AutomaticConnection } from '@/lib/payments/automaticSync';
 import { getConnector } from '@/lib/payments/connectors';
 import { ingestWebhook } from '@/lib/payments/ingest';
+import { connectorForSyncedTransaction } from '@/lib/payments/syncConnector';
 import { syncConnectionPayments } from '@/lib/payments/manualSync';
 import { tallyPaymentKinds, type PaymentKindCounts } from '@/lib/payments/paymentKinds';
 import { refreshAccessToken } from '@/lib/payments/connectors/mercadopagoOAuth';
@@ -63,10 +64,7 @@ async function handler(request: NextRequest) {
           },
           ingest: async (selected, transaction: NormalizedTransaction) => {
             const webhookRequest: WebhookRequest = { rawBody: '', headers: {}, query: { connection: selected.id } };
-            const authoritative = { ...connector, fetchTransaction: async (_: typeof selected, id: string) => {
-              if (id !== transaction.externalId) throw new Error('sync_transaction_id_mismatch');
-              return transaction;
-            } };
+            const authoritative = connectorForSyncedTransaction(connector, transaction);
             const ingested = await ingestWebhook({ provider: selected.provider, request: webhookRequest,
               repo, connectorFactory: () => authoritative });
             return ingested.outcome === 'processed' ? 'processed' : ingested.outcome === 'duplicate' ? 'duplicate' : 'failed';
