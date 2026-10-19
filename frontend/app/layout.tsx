@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "PayAlert SaaS Admin",
+  title: "PayAlert",
   description: "Admin Dashboard for PayAlert",
   manifest: "/manifest.json",
   appleWebApp: {
