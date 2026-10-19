@@ -54,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     if (!response.ok) throw new Error(`Mercado Pago refund failed (${response.status})`);
     await bookingRef.update({ status: 'reembolsada', 'pago.estado': 'reembolsado' });
-    await transitionCharge(charge.id, 'refunded');
+    await transitionCharge(charge.id, 'approved', 'refunded');
     return NextResponse.json({ status: 'refunded' }, { headers });
   } catch (error) {
     console.error('hub_refund_failed', error instanceof Error ? error.name : 'unknown');

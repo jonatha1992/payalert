@@ -22,16 +22,16 @@ export async function applyHubPayment(payment: HubPayment, db: Db): Promise<void
     if (updateError) throw updateError;
     return;
   }
-  if (charge.status !== 'pending') return;
+  if (charge.status !== 'pending' && charge.status !== 'expired') return;
   if (payment.status !== 'CONFIRMED' && payment.status !== 'REJECTED') return;
 
   const approved = payment.status === 'CONFIRMED';
-  const expired = Date.parse(charge.expires_at) <= Date.now();
+  if (!approved && charge.status !== 'pending') return;
+  const expired = charge.status === 'expired' || Date.parse(charge.expires_at) <= Date.now();
   const nextStatus = approved ? (expired ? 'needs_refund' : 'approved') : 'rejected';
   const { data: updated, error: transitionError } = await db.from('hub_charges')
-    .update({ status: nextStatus, payment_id: payment.externalId, firestore_synced: false,
-      last_error: null, updated_at: new Date().toISOString() })
-    .eq('id', charge.id).eq('status', 'pending').select('id').maybeSingle();
+    .update({ status: nextStatus, payment_id: payment.externalId, firestore_synced: false, last_error: null, updated_at: new Date().toISOString() })
+    .eq('id', charge.id).eq('status', charge.status).select('id').maybeSingle();
   if (transitionError) throw transitionError;
   if (!updated) return;
   if (nextStatus === 'needs_refund') {

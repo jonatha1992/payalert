@@ -3,15 +3,17 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   app: { id: 'app-1', slug: 'demo', business_id: 'biz-1', connection_id: 'conn-1', allowed_origins: ['https://shop.test'], firebase_project_id: 'project-1', firebase_sa_encrypted: 'sealed', admin_emails: [], deposit_default: 5000 },
-  charge: null as { id: string; preference_id: string | null } | null,
-  booking: { uid: 'user-1', status: 'pendiente', config: { pagos: { senia: 1200 } } },
+  connection: { provider: 'mercadopago', status: 'active', credentials_encrypted: 'sealed' },
+  charge: null as { id: string; preference_id: string | null; init_point?: string | null } | null,
+  booking: { uid: 'user-1', status: 'pendiente' },
+  configSenia: 5000,
   owner: 'user-1', tokenValid: true,
   load: vi.fn(), allowed: vi.fn(), verify: vi.fn(), getBooking: vi.fn(), find: vi.fn(), create: vi.fn(),
-  getService: vi.fn(), updateBooking: vi.fn(), fetch: vi.fn(), decrypt: vi.fn(),
+  getService: vi.fn(), updateBooking: vi.fn(), updateCharge: vi.fn(), fetch: vi.fn(), decrypt: vi.fn(),
 }));
-vi.mock('@/lib/server/clientApps', () => ({ loadClientApp: mocks.load, originAllowed: mocks.allowed }));
-vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ auth: { verifyIdToken: mocks.verify }, firestore: { collection: () => ({ doc: () => ({ get: mocks.getBooking, update: mocks.updateBooking }) }) } }) }));
-vi.mock('@/lib/server/hubCharges', () => ({ createCharge: mocks.create, findCharge: mocks.find }));
+vi.mock('@/lib/server/clientApps', () => ({ loadClientApp: mocks.load, originAllowed: mocks.allowed, originAllowedForAnyApp: vi.fn(async () => true) }));
+vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ auth: { verifyIdToken: mocks.verify }, firestore: { collection: (name: string) => name === 'config' ? { doc: () => ({ get: async () => ({ data: () => ({ senia: mocks.configSenia }) }) }) } : { doc: () => ({ get: mocks.getBooking }) }, runTransaction: async (callback: (transaction: { get: typeof mocks.getBooking; update: typeof mocks.updateBooking }) => unknown) => callback({ get: mocks.getBooking, update: mocks.updateBooking }) } }) }));
+vi.mock('@/lib/server/hubCharges', () => ({ claimCharge: mocks.create, updateCreatingCharge: mocks.updateCharge, findCharge: mocks.find }));
 vi.mock('@/lib/server/session', () => ({ getServiceClient: mocks.getService }));
 vi.mock('@/lib/payments/secretBox', () => ({ decryptSecret: mocks.decrypt }));
 vi.mock('node:crypto', () => ({ randomUUID: () => 'opaque-ref' }));
@@ -21,18 +23,32 @@ const request = (data: unknown, origin = 'https://shop.test') => new NextRequest
 
 describe('POST /api/v1/charges', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.charge = null; mocks.booking = { uid: 'user-1', status: 'pendiente', config: { pagos: { senia: 1200 } } }; mocks.owner = 'user-1'; mocks.tokenValid = true;
+    vi.clearAllMocks(); mocks.charge = null; mocks.booking = { uid: 'user-1', status: 'pendiente' }; mocks.configSenia = 5000; mocks.owner = 'user-1'; mocks.tokenValid = true;
     mocks.load.mockResolvedValue(mocks.app); mocks.allowed.mockImplementation((_app, origin) => origin === 'https://shop.test');
     mocks.verify.mockImplementation(async () => { if (!mocks.tokenValid) throw new Error('bad token'); return { uid: mocks.owner }; });
     mocks.getBooking.mockImplementation(async () => ({ exists: true, data: () => mocks.booking }));
-    mocks.find.mockImplementation(async () => mocks.charge); mocks.create.mockImplementation(async (input) => ({ id: 'charge-1', ...input }));
-    mocks.getService.mockReturnValue({ from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ single: async () => ({ data: { credentials_encrypted: 'sealed' }, error: null }) }) }) }) }) });
+    mocks.find.mockImplementation(async () => mocks.charge); mocks.create.mockImplementation(async (input) => ({ created: true, charge: { id: 'charge-1', ...input, preference_id: null, init_point: null, status: 'creating' } })); mocks.updateCharge.mockResolvedValue({});
+    mocks.getService.mockReturnValue({ from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ single: async () => ({ data: mocks.connection, error: null }) }) }) }) }) });
     mocks.decrypt.mockReturnValue(JSON.stringify({ access_token: 'access' })); mocks.updateBooking.mockResolvedValue(undefined);
     mocks.fetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'pref-1', init_point: 'https://mp.test/pref' }) }); vi.stubGlobal('fetch', mocks.fetch); process.env.NEXT_PUBLIC_APP_URL = 'https://api.test';
   });
   it('rejects invalid Firebase ID tokens', async () => { mocks.tokenValid = false; expect((await POST(request({ app: 'demo', bookingId: 'b1' }))).status).toBe(401); });
   it('rejects origins outside the app allowlist', async () => { expect((await POST(request({ app: 'demo', bookingId: 'b1' }, 'https://evil.test'))).status).toBe(403); expect(mocks.verify).not.toHaveBeenCalled(); });
   it('rejects bookings owned by another Firebase uid', async () => { mocks.owner = 'other'; expect((await POST(request({ app: 'demo', bookingId: 'b1' }))).status).toBe(403); });
-  it('uses configured amount and ignores amount in the request body', async () => { const response = await POST(request({ app: 'demo', bookingId: 'b1', amount: 1 })); expect(response.status).toBe(200); expect(mocks.fetch).toHaveBeenCalledOnce(); const [, init] = mocks.fetch.mock.calls[0]; expect(JSON.parse(init.body).items[0].unit_price).toBe(12); });
-  it('returns the existing preference without creating another one', async () => { mocks.charge = { id: 'existing', preference_id: 'https://mp.test/old' }; const response = await POST(request({ app: 'demo', bookingId: 'b1' })); expect(await response.json()).toEqual({ init_point: 'https://mp.test/old' }); expect(mocks.fetch).not.toHaveBeenCalled(); });
+  it('sends the exact peso amount and checkout payload', async () => {
+    const response = await POST(request({ app: 'demo', bookingId: 'b1', amount: 1 }));
+    expect(response.status).toBe(200);
+    const [, init] = mocks.fetch.mock.calls[0];
+    const payload = JSON.parse(init.body);
+    expect(init.headers.Authorization).toBe('Bearer access');
+    expect(payload.items[0].unit_price).toBe(5000);
+    expect(payload.external_reference).toBe('opaque-ref');
+    expect(payload.notification_url).toBe('https://api.test/api/webhooks/mercadopago');
+    expect(payload.back_urls).toEqual({ success: 'https://shop.test/?pago=exito', failure: 'https://shop.test/?pago=error', pending: 'https://shop.test/?pago=pendiente' });
+    expect(Date.parse(payload.date_of_expiration) - Date.now()).toBeGreaterThan(14 * 60_000);
+    expect(Date.parse(payload.date_of_expiration) - Date.now()).toBeLessThanOrEqual(15 * 60_000);
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 5000, booking_id: 'b1', client_app_id: 'app-1' }));
+    expect(mocks.updateCharge).toHaveBeenCalledWith('charge-1', { preference_id: 'pref-1', init_point: 'https://mp.test/pref' });
+  });
+  it('returns the saved init point when the charge already exists', async () => { mocks.create.mockResolvedValue({ created: false, charge: { id: 'existing', init_point: 'https://mp.test/old' } }); const response = await POST(request({ app: 'demo', bookingId: 'b1' })); expect(await response.json()).toEqual({ init_point: 'https://mp.test/old' }); expect(mocks.fetch).not.toHaveBeenCalled(); });
 });

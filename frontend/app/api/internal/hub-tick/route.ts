@@ -24,7 +24,7 @@ async function expireCharge(db: Database, row: TickCharge): Promise<void> {
     ownedSlots.forEach((slot) => batch.delete(slot.ref));
     if (ownedSlots.length) await batch.commit();
   }
-  await transitionCharge(row.id, 'expired', { firestore_synced: true, last_error: null });
+  await transitionCharge(row.id, 'pending', 'expired', { firestore_synced: true, last_error: null });
 }
 async function syncCharge(row: TickCharge): Promise<void> {
   const { firestore } = firebaseForClientApp(row.client_apps);
@@ -35,7 +35,7 @@ async function syncCharge(row: TickCharge): Promise<void> {
   const approved = row.status === 'approved';
   const confirm = approved && booking.status === 'pendiente' && Date.parse(row.expires_at) > Date.now();
   await bookingRef.update({ ...(confirm ? { status: 'confirmada' } : {}), 'pago.estado': approved ? 'aprobado' : 'rechazado' });
-  await transitionCharge(row.id, row.status, { firestore_synced: true, last_error: null });
+  await transitionCharge(row.id, row.status, row.status as 'pending' | 'approved' | 'rejected' | 'expired' | 'refunded' | 'needs_refund', { firestore_synced: true, last_error: null });
 }
 export async function POST(request: NextRequest) {
   const secret = process.env.HUB_CRON_SECRET;
