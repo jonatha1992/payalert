@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnector } from '@/lib/payments/connectors';
 import { ingestWebhook } from '@/lib/payments/ingest';
+import { connectorForSyncedTransaction } from '@/lib/payments/syncConnector';
 import { syncConnectionPayments } from '@/lib/payments/manualSync';
 import { withRateLimit } from '@/lib/security/withRateLimit';
 import { webhookRateLimiter } from '@/lib/security/rateLimiter';
@@ -34,10 +35,7 @@ async function handler(request: NextRequest, context: Context) {
     listTransactions: selected => connector.listRecentTransactions!(selected),
       ingest: async (selected, transaction: NormalizedTransaction) => {
         const request: WebhookRequest = { rawBody: '', headers: {}, query: { connection: selected.id } };
-        const authoritative = { ...connector, fetchTransaction: async (_: typeof selected, externalId: string) => {
-          if (externalId !== transaction.externalId) throw new Error('sync_transaction_id_mismatch');
-          return transaction;
-        } };
+        const authoritative = connectorForSyncedTransaction(connector, transaction);
         const response = await ingestWebhook({ provider: selected.provider, request, repo: dbRepo,
           connectorFactory: () => authoritative });
         return response.outcome === 'processed' ? 'processed' : response.outcome === 'duplicate' ? 'duplicate' : 'failed';
