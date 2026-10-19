@@ -14,7 +14,7 @@ Se espera documento `bookings/{id}` con `uid`, `status`, `date`, `time` y opcion
 ## Alta de app
 1. Aplicar `docs/migrations/017_client_apps_hub.sql` con credenciales administrativas.
 2. Autorizar OAuth MP con `offline_access read write` (o `MP_OAUTH_SCOPES`).
-3. Preparar localmente `client_apps.json` con slug, business_id, connection_id, firebase_project_id, allowed_origins, admin_emails, deposit_default y ruta del JSON de service account. Ejecutar `node scripts/register-client-app.js client_apps.json`; el JSON no se versiona. El script cifra SA vía `encryptSecret` y solo inserta valores en la tabla.
+  - Preparar localmente `client_apps.json` con slug, business_id, connection_id, firebase_project_id, allowed_origins, admin_emails, deposit_default y ruta de `firebase_service_account_file` relativa al archivo de configuración. Ejecutar `node scripts/register-client-app.js client_apps.json`; el JSON no se versiona. Configurar `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `PAYMENTS_ENCRYPTION_KEY`. El script cifra la service account con `encryptSecret`, genera una API key aleatoria de 256 bits y almacena únicamente su SHA-256; imprime la clave una sola vez para guardarla de forma segura. Nunca imprime la service account.
 
 ## Variables
 - `PAYMENTS_ENCRYPTION_KEY` y opcional `PAYMENTS_ENCRYPTION_KEYS`: claves AES-256-GCM existentes.
