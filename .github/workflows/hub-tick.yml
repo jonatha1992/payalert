@@ -1,0 +1,18 @@
+name: PayAlert hub tick
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Expire pending hub charges and retry Firestore sync
+        env:
+          PAYALERT_URL: ${{ secrets.PAYALERT_URL }}
+          HUB_CRON_SECRET: ${{ secrets.HUB_CRON_SECRET }}
+        run: |
+          test -n "$PAYALERT_URL"
+          test -n "$HUB_CRON_SECRET"
+          curl --fail-with-body --silent --show-error -X POST "${PAYALERT_URL%/}/api/internal/hub-tick" \
+            -H "x-hub-cron-secret: $HUB_CRON_SECRET"
