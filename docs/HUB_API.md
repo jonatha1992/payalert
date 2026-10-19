@@ -9,7 +9,7 @@ Servicio de cobros Checkout Pro para apps cliente Firebase (sin backend propio).
 `POST /api/v1/charges/{bookingId}/refund` JSON `{ "app": "huellitas" }`, Firebase ID token cuyo email esté en `admin_emails`. Reembolsa el total, únicamente con pago aprobado y al menos 24 horas antes del turno. Se marca booking `reembolsada`.
 
 ## Firebase / MP
-Se espera documento `bookings/{id}` con `uid`, `status`, `date`, `time` y opcional `config.pagos.senia`. PayAlert accede a Firestore y Admin Auth con service account cifrada AES-256-GCM; las credenciales MP se reutilizan desde `payment_connections`. Webhook valida datos consultando el pago a Mercado Pago; evento estándar sigue en la cola existente.
+Se espera documento `bookings/{id}` con `uid`, `status`, `date`, `time` y opcional `config.pagos.senia`. PayAlert accede a Firestore y Admin Auth con service account cifrada AES-256-GCM; las credenciales MP se reutilizan desde `payment_connections`. Webhook valida datos consultando el pago a Mercado Pago; cuando su `external_reference` coincide con un cobro del hub, valida importe y moneda autoritativos y actualiza el cobro. Aprobados dentro del plazo confirman la reserva en Firestore (`status=confirmada`, pago aprobado y `paymentId`); aprobaciones tardías quedan `needs_refund` sin confirmar. Rechazados/cancelados marcan el pago del booking como rechazado. Errores de sincronización Firestore quedan registrados (`firestore_synced=false`, `last_error`) para reintento por `hub-tick`; los pagos no asociados al hub mantienen su flujo de transacciones habitual.
 
 ## Alta de app
 1. Aplicar `docs/migrations/017_client_apps_hub.sql` con credenciales administrativas.

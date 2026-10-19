@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(), findConnectionByProviderAccount: vi.fn(), findConnectionByOrder: vi.fn(), findConnectionById: vi.fn(),
   fetchTransaction: vi.fn(), sendPushToBusiness: vi.fn(),
 }));
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/server/hubWebhook', () => ({ applyHubPayment: vi.fn() }));
 vi.mock('@/lib/server/webhookQueue', () => ({ WebhookQueue: vi.fn(() => ({ enqueue: mocks.enqueue })) }));
 vi.mock('@/lib/server/session', () => ({ getServiceClient: vi.fn(() => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) })) }));
 vi.mock('@/lib/server/paymentsRepository', () => ({ SupabasePaymentsRepository: vi.fn(() => ({

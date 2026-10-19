@@ -7,6 +7,7 @@ import { sendPushToBusiness } from '@/lib/server/push';
 import { SupabasePaymentsRepository } from '@/lib/server/paymentsRepository';
 import { WebhookQueue } from '@/lib/server/webhookQueue';
 import { getServiceClient } from '@/lib/server/session';
+import { applyHubPayment } from '@/lib/server/hubWebhook';
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -31,6 +32,18 @@ export async function processWebhook(
   const db = getServiceClient();
   const repo = new SupabasePaymentsRepository(db);
   const result = await ingestWebhook({ provider, request: webhookRequest, repo, connectorFactory });
+  if (provider === 'mercado_pago') {
+    const body = parseWebhookPayload(webhookRequest.rawBody);
+    const value = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+    const id = value.data && typeof value.data === 'object' ? (value.data as Record<string, unknown>).id : null;
+    if (id != null && value.user_id != null) {
+      const connection = await repo.findConnectionByProviderAccount(provider, String(value.user_id));
+      if (connection) {
+        const payment = await connectorFactory(provider).fetchTransaction(connection, String(id));
+        await applyHubPayment(payment, db);
+      }
+    }
+  }
   if (result.notify && result.notification && result.transactionId) {
     const { data, error } = await db.from('transactions').select('business_id')
       .eq('id', result.transactionId).maybeSingle<{ business_id: string }>();
