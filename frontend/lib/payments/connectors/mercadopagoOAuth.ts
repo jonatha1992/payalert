@@ -7,7 +7,7 @@ import {
 
 export const MP_OAUTH_SCOPES = "offline_access read";
 export const MP_AUTHORIZATION_URL =
-  "https://auth.mercadopago.com/authorization";
+  "https://auth.mercadopago.com.ar/authorization";
 export const MP_TOKEN_URL = "https://api.mercadopago.com/oauth/token";
 export const MP_STATE_TTL_SECONDS = 600;
 

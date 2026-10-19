@@ -61,7 +61,7 @@ describe("Mercado Pago OAuth", () => {
   it("builds documented auth URL and exchanges authorization code via mocked provider", async () => {
     const url = new URL(authorizationUrl(config, "state"));
     expect(url.origin + url.pathname).toBe(
-      "https://auth.mercadopago.com/authorization",
+      "https://auth.mercadopago.com.ar/authorization",
     );
     expect(url.searchParams.get("redirect_uri")).toBe(config.redirectUri);
     expect(url.searchParams.get("scope")).toBe("offline_access read");
