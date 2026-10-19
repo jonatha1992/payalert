@@ -32,3 +32,21 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 **Ticket/commit:** PAY-19.
 
+
+## 2026-10-18 — Transferencias: consulta automática de pagos además de IPN
+**Contexto:** los comerciantes cobran por transferencia (CVU/alias). IPN/Webhooks de Mercado Pago solo ofrecen eventos de pagos, órdenes, contracargos, Point y fraude; no hay evento de transferencias.
+**Decisión:** ruta protegida `/api/internal/sync-connections` que consulta los pagos de cada cuenta conectada (máx. 20 por corrida), renueva tokens OAuth vencidos y cuenta `operation_type`/`payment_type_id`/`payment_method_id` para verificar si las transferencias aparecen.
+**Alternativas descartadas:** solo IPN (no cubre transferencias); reporte diario «Todas las transacciones» (latencia de 24 h); leer notificaciones del celular (solo Android, frágil).
+**Motivo:** es la única vía con latencia de minutos; falta confirmarlo con una transferencia real de $100.
+**Impacto:** requiere un disparador externo cada minuto (Vercel Hobby solo permite cron diario).
+**Ticket/commit:** 0c85bc5, 1a1a7bf, 38c8e5f, 84081f0.
+
+## 2026-10-18 — Clave de firma del webhook única por app
+**Contexto:** las conexiones creadas con OAuth no guardan clave de webhook; PayAlert rechazaba sus avisos con 401.
+**Decisión:** usar `MP_WEBHOOK_SECRET` (clave secreta de la app «pay alert») cuando la conexión no tiene clave propia.
+**Alternativas descartadas:** pedir la clave a cada comerciante (contradice el «sin copiar claves»).
+**Impacto:** hay que cargar `MP_WEBHOOK_SECRET` en `.env` y Vercel.
+**Ticket/commit:** 3593b63.
+
+## 2026-10-18 — Ramas dev → test → main
+**Decisión:** se creó `test` y se renombró `master` a `main`. Los pushes solo generan deploys Preview; producción (`payalert-kappa`) se despliega a mano con la CLI.
