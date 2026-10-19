@@ -8,7 +8,6 @@ import { decryptSecret } from '@/lib/payments/secretBox';
 
 const AUTH_SCHEME = 'Bearer';
 const cors = (origin: string) => ({ 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', Vary: 'Origin' });
-const AUTH_SCHEME = 'Bearer';
 function jsonError(error: string, status: number, headers: Record<string, string> = {}) { return NextResponse.json({ error }, { status, headers }); }
 function validBody(value: unknown): value is { app: string; bookingId: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
