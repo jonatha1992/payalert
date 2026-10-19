@@ -33,7 +33,20 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 **Ticket/commit:** PAY-19.
 
 
-## 2026-10-18 — Transferencias: consulta automática de pagos además de IPN
+## 2026-10-19 — PAY-38: avisos rápidos de transferencias desde Android
+
+**Contexto:** Mercado Pago no envía IPN para transferencias CVU/alias. Una notificación local puede falsificarse y no prueba acreditación.
+
+**Decisión:** Aceptar avisos solo del paquete Mercado Pago con Bearer/RBAC, guardarlos como transacciones `pending` con fuente en metadata y enviar push etiquetado como no confirmado. Usar id determinista por negocio/notificationKey. Una eventual conciliación requiere pago de sincronización confirmado, tipo bank_transfer, monto exacto y ventana ±10 minutos sin ambigüedad.
+
+**Alternativas descartadas:** Tratar el texto del teléfono como pago confirmado o sumar el aviso al balance; usar el texto como dato de autoridad.
+
+**Motivo:** Detectar comprobantes posiblemente falsos con baja latencia sin convertir una notificación suplantable en evidencia de dinero recibido.
+
+**Impacto:** Endpoint, parser, conciliación desde ingestión/sincronización y pruebas implementados. Los hints `pending` se excluyen de estadísticas y totales del dashboard. No requiere migración.
+
+**Ticket/commit:** PAY-38.
+
 **Contexto:** los comerciantes cobran por transferencia (CVU/alias). IPN/Webhooks de Mercado Pago solo ofrecen eventos de pagos, órdenes, contracargos, Point y fraude; no hay evento de transferencias.
 **Decisión:** ruta protegida `/api/internal/sync-connections` que consulta los pagos de cada cuenta conectada (máx. 20 por corrida), renueva tokens OAuth vencidos y cuenta `operation_type`/`payment_type_id`/`payment_method_id` para verificar si las transferencias aparecen.
 **Alternativas descartadas:** solo IPN (no cubre transferencias); reporte diario «Todas las transacciones» (latencia de 24 h); leer notificaciones del celular (solo Android, frágil).

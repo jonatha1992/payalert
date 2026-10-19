@@ -113,7 +113,8 @@ const LOG_STATUS: Record<WebhookLogEntry['status'], string> = {
 };
 
 export class SupabasePaymentsRepository implements PaymentsRepository {
-  constructor(private readonly db: SupabaseClient) {}
+  db: SupabaseClient;
+  constructor(db: SupabaseClient) { this.db = db; }
 
   private async activeConnection(query: PromiseLike<{ data: ConnectionRow | null; error: unknown }>) {
     const { data, error } = await query;

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       .from('transactions')
       .select('*')
       .eq('business_id', businessId)
+      .neq('status', 'pending')
       .gte('created_at', `${start}T00:00:00`)
       .lte('created_at', `${end}T23:59:59`);
 
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
       .from('transactions')
       .select('type, amount')
       .eq('business_id', businessId)
+      .neq('status', 'pending')
       .gte('created_at', `${prevStartDate.toISOString().split('T')[0]}T00:00:00`)
       .lte('created_at', `${prevEndDate.toISOString().split('T')[0]}T23:59:59`);
 
