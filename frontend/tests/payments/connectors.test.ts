@@ -33,6 +33,20 @@ describe('Mercado Pago connector', () => {
     expect('createCharge' in connector).toBe(false);
   });
 
+  it('usa la clave secreta de la app (MP_WEBHOOK_SECRET) para conexiones OAuth sin clave propia', () => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    const connector = new MercadoPagoConnector(vi.fn());
+    const oauth = { ...connection, webhookSecret: null };
+    const signed = request({ type: 'payment', data: { id: 12 }, user_id: 22 });
+    vi.stubEnv('MP_WEBHOOK_SECRET', '');
+    expect(connector.parseWebhook(signed, oauth)).toEqual({ kind: 'rejected', reason: 'missing_secret' });
+    vi.stubEnv('MP_WEBHOOK_SECRET', 'private-secret');
+    expect(connector.parseWebhook(signed, oauth).kind).toBe('accepted');
+    vi.stubEnv('MP_WEBHOOK_SECRET', 'otra-clave');
+    expect(connector.parseWebhook(signed, oauth).kind).toBe('rejected');
+    vi.unstubAllEnvs();
+  });
+
   it('ignores unrelated events and rejects missing IDs, malformed bodies, secrets and signatures', () => {
     const connector = new MercadoPagoConnector(vi.fn());
     expect(connector.parseWebhook(request({ type: 'merchant_order' }), connection).kind).toBe('ignored');

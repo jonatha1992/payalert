@@ -14,12 +14,14 @@ export class MercadoPagoConnector implements PaymentConnector {
     if (!body) return { kind: 'rejected', reason: 'invalid_body' };
     const eventType = request.query.type || asIdentifier(body.type) || asIdentifier(body.topic);
     if (eventType !== 'payment') return { kind: 'ignored', reason: 'unsupported_type' };
-    if (!connection?.webhookSecret) return { kind: 'rejected', reason: 'missing_secret' };
+    // Conexiones OAuth no guardan clave propia: usan la clave secreta de la app de PayAlert (una para todas las cuentas).
+    const webhookSecret = connection?.webhookSecret || process.env.MP_WEBHOOK_SECRET || null;
+    if (!connection || !webhookSecret) return { kind: 'rejected', reason: 'missing_secret' };
     const externalId = request.query['data.id'] || asIdentifier(asRecord(body.data)?.id);
     if (!externalId) return { kind: 'rejected', reason: 'missing_id' };
     const signature = verifyMercadoPagoSignature({ xSignature: header(request, 'x-signature'),
       xRequestId: header(request, 'x-request-id'), dataId: externalId,
-      secret: connection.webhookSecret, toleranceSeconds: 600 });
+      secret: webhookSecret, toleranceSeconds: 600 });
     if (!signature.ok) return { kind: 'rejected', reason: signature.reason };
     return { kind: 'accepted', externalId, providerAccountId: asIdentifier(body.user_id),
       providerOrderId: null, eventType };
