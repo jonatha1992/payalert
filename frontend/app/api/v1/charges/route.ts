@@ -3,11 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { loadClientApp, originAllowed, originAllowedForAnyApp } from '@/lib/server/clientApps';
 import { firebaseForClientApp } from '@/lib/server/firebaseAdmin';
 import { claimCharge, updateCreatingCharge } from '@/lib/server/hubCharges';
+import { corsHeaders, AUTH_SCHEME } from '@/lib/server/hubHttp';
 import { getServiceClient } from '@/lib/server/session';
 import { decryptSecret } from '@/lib/payments/secretBox';
 
-const AUTH_SCHEME = 'Bearer';
-const cors = (origin: string) => ({ 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', Vary: 'Origin' });
 function jsonError(error: string, status: number, headers: Record<string, string> = {}) { return NextResponse.json({ error }, { status, headers }); }
 function validBody(value: unknown): value is { app: string; bookingId: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -17,7 +16,7 @@ function validBody(value: unknown): value is { app: string; bookingId: string } 
 function configuredDeposit(value: unknown): number { return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 1_000_000 ? value : 5000; }
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get('origin');
-  if (origin && await originAllowedForAnyApp(origin)) return new NextResponse(null, { status: 204, headers: cors(origin) });
+  if (origin && await originAllowedForAnyApp(origin)) return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
   return new NextResponse(null, { status: 403 });
 }
 export async function POST(request: NextRequest) {
@@ -31,8 +30,8 @@ export async function POST(request: NextRequest) {
     const app = await loadClientApp(body.app);
     if (!app) return jsonError('unknown_app', 404);
     if (!originAllowed(app, origin)) return jsonError('origin_denied', 403);
-    headers = cors(origin!);
-    const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+    headers = corsHeaders(origin!);
+    const bearer = request.headers.get('authorization')?.match(new RegExp(`^${AUTH_SCHEME}\\s+(.+)$`, 'i'))?.[1];
     if (!bearer) return jsonError('unauthorized', 401, headers);
     const { auth, firestore } = firebaseForClientApp(app);
     let decoded;

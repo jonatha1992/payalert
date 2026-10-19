@@ -3,7 +3,7 @@ import { getServiceClient } from '@/lib/server/session';
 import { firebaseForClientApp } from '@/lib/server/firebaseAdmin';
 import type { NormalizedTransaction } from '@/lib/payments/types';
 import type { ClientApp } from '@/lib/server/clientApps';
-import type { HubCharge } from '@/lib/server/hubCharges';
+import { transitionCharge, hubChargeTransitions, type HubCharge } from '@/lib/server/hubCharges';
 
 type HubPayment = Pick<NormalizedTransaction, 'externalReference' | 'externalId' | 'amount' | 'currency' | 'status'>;
 type ChargeRow = HubCharge & { client_apps: ClientApp };
@@ -28,15 +28,12 @@ export async function applyHubPayment(payment: HubPayment, db: Db): Promise<void
   const approved = payment.status === 'CONFIRMED';
   if (!approved && charge.status !== 'pending') return;
   const expired = charge.status === 'expired' || Date.parse(charge.expires_at) <= Date.now();
-  const nextStatus = approved ? (expired ? 'needs_refund' : 'approved') : 'rejected';
-  const { data: updated, error: transitionError } = await db.from('hub_charges')
-    .update({ status: nextStatus, payment_id: payment.externalId, firestore_synced: false, last_error: null, updated_at: new Date().toISOString() })
-    .eq('id', charge.id).eq('status', charge.status).select('id').maybeSingle();
-  if (transitionError) throw transitionError;
-  if (!updated) return;
+  const nextStatus: HubCharge['status'] = approved ? (expired ? 'needs_refund' : 'approved') : 'rejected';
+  if (!hubChargeTransitions[charge.status].includes(nextStatus)) return;
+  const changed = await transitionCharge(charge.id, charge.status, nextStatus, { payment_id: payment.externalId, firestore_synced: false, last_error: null });
+  if (!changed) return;
   if (nextStatus === 'needs_refund') {
-    const { error: refundSyncError } = await db.from('hub_charges')
-      .update({ firestore_synced: true, updated_at: new Date().toISOString() }).eq('id', charge.id);
+    const { error: refundSyncError } = await db.from('hub_charges').update({ firestore_synced: true, updated_at: new Date().toISOString() }).eq('id', charge.id).eq('status', 'needs_refund');
     if (refundSyncError) throw refundSyncError;
     return;
   }

@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/server/session', () => ({ getServiceClient: () => ({ from: () => ({ update: (patch: unknown) => ({ eq: (_key: string, value: string) => ({ eq: (_key2: string, from: string) => ({ select: () => ({ maybeSingle: async () => mock.query(patch, value, from) }) }) }) }) }) }) }));
-import { transitionCharge } from '@/lib/server/hubCharges';
+import { transitionCharge, hubChargeTransitions } from '@/lib/server/hubCharges';
 describe('hub charge transitions', () => {
+  it('defines the full transition table and blocks forbidden terminal reopens', () => {
+    expect(hubChargeTransitions).toEqual({ creating: ['pending'], pending: ['approved','rejected','expired','needs_refund'], approved: ['refunding'], refunding: ['approved','refunded'], rejected: [], expired: ['needs_refund'], needs_refund: [], refunded: [] });
+    expect(hubChargeTransitions.expired).not.toContain('approved');
+    expect(hubChargeTransitions.rejected).not.toContain('approved');
+  });
   beforeEach(() => { vi.clearAllMocks(); mock.query.mockResolvedValue({ data: { id: 'c1', status: 'approved' }, error: null }); });
   it('allows only explicit transitions and filters update by the expected current state', async () => {
     await transitionCharge('c1', 'pending', 'approved', { payment_id: 'mp1' });
