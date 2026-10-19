@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, ScrollView, Text, View, Linking, AppState } from 'react-native';
+import { Button, ScrollView, Text, View, AppState } from 'react-native';
 import { supabase } from '../src/auth';
 import { filterNotification, type NativeNotification } from '../src/notifications/filter';
-import { notificationEvents, notificationListener } from '../src/notifications/native';
+import { notificationEvents, notificationListener, drainNativeQueue } from '../src/notifications/native';
 import { notificationHistory, paymentHintQueue } from '../src/notifications/client';
 import type { QueueEntry } from '../src/notifications/queue';
 
@@ -12,6 +12,10 @@ export default function PaymentHintsScreen() {
   const refresh = useCallback(async () => {
     setActive(Boolean(await notificationListener?.isEnabled()));
     setHistory(await notificationHistory());
+    for (const notice of await drainNativeQueue()) {
+      const hint = filterNotification(notice);
+      if (hint) await paymentHintQueue.enqueue(hint);
+    }
     if ((await supabase.auth.getSession()).data.session) await paymentHintQueue.flush();
     setHistory(await notificationHistory());
   }, []);

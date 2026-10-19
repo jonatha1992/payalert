@@ -56,4 +56,27 @@ npx expo-doctor
 npx expo export --platform android
 ```
 
-The app only presents API results; it does not reimplement financial or authorization logic. No phone/emulator validation is included in F1.
+A physical Android device or emulator is required to verify Android's notification-access settings, service lifecycle, SharedPreferences queueing, and actual Mercado Pago notification delivery. These behaviors are not verified by JS unit tests.
+
+## Payment notification hints (Android)
+
+The native `NotificationListenerService` listens only to `com.mercadopago.wallet`. It queues notification metadata in app-private SharedPreferences while JavaScript is unavailable; when the app opens, queued notices are drained into the local retry queue and sent as hints to `POST /api/mobile/payment-hints` with the signed-in user's Bearer token. Only the API may decide whether a notice is plausible; a device notice is not proof of payment and can be forged. Do not log notice text or access tokens.
+
+This requires an Android **development build** containing the local Expo native module. It does not work in Expo Go. The user must manually enable PayAlert under Android Settings → Notification access. Android battery optimization may stop or delay the listener; users may need to allow background operation.
+
+### Generate a test APK (not run as part of this task)
+
+Option A, EAS preview APK:
+
+```sh
+eas build --profile preview --platform android
+```
+
+Option B, generate native Android files locally and build/install with a configured Android SDK:
+
+```sh
+npx expo prebuild --platform android
+npx expo run:android
+```
+
+The config plugin copies and links `modules/notification-listener/android` during prebuild. No EAS build, prebuild, cloud operation, or deployment is performed as part of this task.
