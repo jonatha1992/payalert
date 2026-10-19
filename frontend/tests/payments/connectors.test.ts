@@ -20,7 +20,7 @@ function request(body: unknown, query: Record<string, string> = {}, signedId = '
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const charge: CreateChargeInput = { amount: 10.9, currency: 'ARS', expectedPaymentId: 'e', description: 'Order',
   notificationUrl: 'https://example.com/hook', successUrl: 'https://example.com/ok', failureUrl: 'https://example.com/fail' };
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe('Mercado Pago connector', () => {
   it('accepts payment notifications with query precedence and body fallback', () => {
@@ -48,6 +48,7 @@ describe('Mercado Pago connector', () => {
   });
 
   it('ignores unrelated events and rejects missing IDs, malformed bodies, secrets and signatures', () => {
+    vi.stubEnv('MP_WEBHOOK_SECRET', '');
     const connector = new MercadoPagoConnector(vi.fn());
     expect(connector.parseWebhook(request({ type: 'merchant_order' }), connection).kind).toBe('ignored');
     expect(connector.parseWebhook(request({ type: 'payment' }), connection).kind).toBe('rejected');
