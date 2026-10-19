@@ -1,5 +1,5 @@
 import { verifyMercadoPagoSignature } from '../mercadopagoSignature';
-import { normalizeMercadoPagoPayment } from '../normalize';
+import { isInternalMercadoPagoMovement, normalizeMercadoPagoPayment } from '../normalize';
 import type { PaymentConnection, PaymentConnector, WebhookParseResult, WebhookRequest } from '../types';
 import { ProviderError } from './errors';
 import { asIdentifier, asRecord, header, readWebhookBody } from './payload';
@@ -48,7 +48,7 @@ export class MercadoPagoConnector implements PaymentConnector {
     if (!response.ok) throw new ProviderError(this.provider, response.status);
     const data = await response.json() as { results?: unknown };
     if (!Array.isArray(data.results)) throw new Error('mercado_pago_search_invalid_response');
-    return data.results.map(normalizeMercadoPagoPayment);
+    return data.results.filter((payment) => !isInternalMercadoPagoMovement(payment)).map(normalizeMercadoPagoPayment);
   }
 
   async healthCheck(connection: PaymentConnection): Promise<{ ok: boolean; detail?: string }> {
