@@ -26,8 +26,8 @@ function refundable(date: unknown, time: unknown, now: number): boolean {
 type RefundFirestore = {
   collection: (name: string) => { doc: (id: string) => DocumentReference };
   runTransaction: <T>(callback: (transaction: Transaction) => Promise<T>) => Promise<T>;
+  persistBooking: (bookingId: string) => Promise<void>;
 };
-
 
 async function updateRefundedBooking(firestore: RefundFirestore, bookingId: string): Promise<void> {
   const bookingRef = firestore.collection('bookings').doc(bookingId);
@@ -36,6 +36,7 @@ async function updateRefundedBooking(firestore: RefundFirestore, bookingId: stri
     if (booking.data()?.status !== 'pendiente') throw new Error('booking_not_pending');
     transaction.update(bookingRef, { status: 'reembolsada', 'pago.estado': 'reembolsado' });
   });
+  await firestore.persistBooking(bookingId);
 }
 
 export async function OPTIONS(request: NextRequest) {
@@ -76,22 +77,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'forbidden' }, { status: 403, headers });
     }
     const charge = await findCharge(app.id, bookingId);
-    if (!charge || charge.status !== 'approved' || !charge.payment_id) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
+    if (!charge || !['approved', 'refunding'].includes(charge.status) || !charge.payment_id) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
     const booking = await firestore.collection('bookings').doc(bookingId).get();
     if (!booking.exists) return NextResponse.json({ error: 'booking_not_found' }, { status: 404, headers });
     if (!refundable(booking.data()?.date, booking.data()?.time, Date.now())) return NextResponse.json({ error: 'refund_window_closed' }, { status: 409, headers });
-    const claimed = await transitionCharge(charge.id, 'approved', 'refunding', { firestore_synced: false, last_error: null });
-    if (!claimed) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
+    if (charge.status === 'approved') {
+      const claimed = await transitionCharge(charge.id, 'approved', 'refunding', { firestore_synced: false, last_error: null });
+      if (!claimed) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
+    }
     chargeId = charge.id;
     const { data: connection, error } = await getServiceClient().from('payment_connections').select('credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).single();
     if (error) throw error;
     const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token: string };
     const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(charge.payment_id)}/refunds`, {
           method: 'POST',
-          headers: { Authorization: `${AUTH_SCHEME} ${credentials.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `refund:${app.id}:${bookingId}` },
+          headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `refund:${app.id}:${bookingId}` },
       body: JSON.stringify({ amount: charge.amount / 100 }),
     });
-    const refund = await response.json() as { status?: unknown };
+    let refund: { status?: unknown };
+    try {
+      refund = await response.json() as { status?: unknown };
+    } catch {
+      if (response.status >= 400 && response.status < 500) {
+        await transitionCharge(charge.id, 'refunding', 'approved', { last_error: 'refund_rejected' });
+        chargeId = null;
+        return NextResponse.json({ error: 'refund_failed' }, { status: response.status, headers });
+      }
+      throw new Error(`Mercado Pago refund outcome unavailable (${response.status})`);
+    }
+    if (response.status >= 400 && response.status < 500) {
+      await transitionCharge(charge.id, 'refunding', 'approved', { last_error: 'refund_rejected' });
+      chargeId = null;
+      return NextResponse.json({ error: 'refund_failed' }, { status: response.status, headers });
+    }
     if (!response.ok || refund.status !== 'approved') throw new Error(`Mercado Pago refund failed (${response.status})`);
     await updateRefundedBooking(firestore, bookingId);
     const completed = await transitionCharge(charge.id, 'refunding', 'refunded', { firestore_synced: true, last_error: null });
@@ -99,9 +117,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     chargeId = null;
     return NextResponse.json({ status: 'refunded' }, { headers });
   } catch (error) {
-    if (chargeId) await transitionCharge(chargeId, 'refunding', 'approved', { last_error: error instanceof Error ? error.name : 'refund_failed' });
+    // Keep the CAS claim: the remote refund may have succeeded before this failure.
     console.error('hub_refund_failed', error instanceof Error ? error.name : 'unknown');
-    return NextResponse.json({ error: 'refund_failed' }, { status: 500, headers });
+    return chargeId ? NextResponse.json({ status: 'refunding' }, { status: 202, headers }) : NextResponse.json({ error: 'refund_failed' }, { status: 500, headers });
   }
 }
 
