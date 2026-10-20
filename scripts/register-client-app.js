@@ -23,6 +23,9 @@ async function main() {
   const apiKey = randomBytes(32).toString('base64url');
   const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
   const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: connection, error: connectionError } = await db.from('payment_connections').select('id').eq('id', config.connection_id).eq('business_id', config.business_id).maybeSingle();
+  if (connectionError) throw new Error('Could not validate payment connection (' + (connectionError.code || 'database_error') + ')');
+  if (!connection) throw new Error('Payment connection ' + config.connection_id + ' does not belong to business ' + config.business_id);
   const { error } = await db.from('client_apps').insert({ slug: config.slug, business_id: config.business_id, api_key_hash: apiKeyHash, allowed_origins: config.allowed_origins, connection_id: config.connection_id, firebase_project_id: config.firebase_project_id, firebase_sa_encrypted: encryptSecret(JSON.stringify(serviceAccount)), admin_emails: config.admin_emails, deposit_default: config.deposit_default ?? 5000, active: true });
   if (error) throw new Error('Client app registration failed (' + (error.code || 'database_error') + ')');
   console.log('Registered client app ' + config.slug + '. Save this API key now; it will not be shown again: ' + apiKey);
