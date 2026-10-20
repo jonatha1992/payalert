@@ -70,3 +70,17 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 **Decisión:** el análisis (`docs/analisis/`) documenta la sincronización como consulta autoritativa, el aviso del celular como pista sin confirmar (nunca suma en totales) y la exclusión de `money_transfer` + `account_money` como regla `[Inferido]` por pocos casos.
 **Pendientes:** cadencia y costo del disparador, prueba de PAY-38 en un Android real, bitácora de errores, cierre del registro abierto.
 **Ticket/commit:** PAY-36, PAY-38, PAY-39.
+
+## 2026-10-19 — PAY-38: consulta inmediata tras aviso móvil
+
+**Contexto:** Mercado Pago no envía IPN para transferencias comunes; el aviso Android es una pista no autoritativa y el cron disponible no ofrece baja latencia.
+
+**Decisión:** Al persistir la pista se programa `after()` para consultar conexiones activas usando el flujo existente de sync/OAuth, hasta cuatro intentos separados por cinco segundos y maxDuration 60 s. La sincronización se coalesce por negocio dentro de la instancia; al conciliar se usa el fanout push existente. Si no aparece el pago, el hint queda PENDING.
+
+**Alternativas descartadas:** cron, bloquear respuesta móvil, duplicar el flujo de sincronización.
+
+**Motivo:** respuesta móvil rápida y confirmación autoritativa por consulta a Mercado Pago.
+
+**Impacto:** fallos y resultados de intentos se registran. La restricción anti-abuso es por instancia, no distribuida. No hay prueba real Android/MP ni servicios externos usados en este cambio.
+
+**Ticket/commit:** PAY-38.

@@ -75,7 +75,7 @@ Las transferencias comunes CVU/alias de MP no producen IPN/webhook utilizable se
 
 - **Actores:** ACT-03 usuario/cliente Android; EXT-05 persistencia; EXT-01 Mercado Pago como fuente posterior autoritativa.
 - **Precondiciones:** permiso de acceso a notificaciones activado explícitamente en Android; sesión activa para subir avisos.
-- **Flujo principal:** servicio nativo filtra notificación MP, conserva aviso local en cola acotada, aplicación envía pista a `POST /api/mobile/payment-hints`; servidor valida sesión/negocio y payload, guarda `PENDING`; al ingresar pago MP confirmado `bank_transfer`, intenta conciliar por importe exacto y ±10 min; solo coincidencia única pasa a conciliada. La pista no suma a totales.
+- **Flujo principal:** servicio nativo filtra notificación MP, conserva aviso local en cola acotada, aplicación envía pista a `POST /api/mobile/payment-hints`; servidor valida sesión/negocio y payload, guarda `PENDING` y agenda con `after()` hasta cuatro sincronizaciones cortas de conexiones activas, sin bloquear respuesta; al ingresar pago MP confirmado `bank_transfer`, intenta conciliar por importe exacto y ±10 min; solo coincidencia única pasa a conciliada y dispara push confirmado. La pista no suma a totales.
 - **Alternativos:** aviso inválido/no soportado → descartar; duplicado → no crear nueva pista; subida offline → conservar en cola local hasta reintento; candidato ambiguo/sin pago → dejar pendiente para revisión/expiración según política.
 - **Postcondición:** nunca se comunica confirmación de dinero basándose solo en texto notificado; la decisión autoritativa se toma en servidor.
 - **Cumple:** RF-20/RF-21; RN-22.

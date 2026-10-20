@@ -23,8 +23,8 @@ Estados se declaran **solo aquí**: ✅ implementado en código observado; 🟡 
 | RF-17 | ✅ | CU-04, CU-05 | `/dashboard/terminal` | expected-payments y candidates | `frontend/app/dashboard/terminal/page.tsx` | `frontend/tests/payments/matching.test.ts`; `frontend/tests/payments/ingest.test.ts` | PAY-16 |
 | RF-18 | ✅ | CU-11, CU-13 | integrations | `POST /api/integrations/{id}/sync` | `frontend/app/api/integrations/[id]/sync/route.ts`; `manualSync.ts`; `syncConnector.ts` | prueba específica pendiente | PAY-36 |
 | RF-19 | 🟡 | CU-12, CU-13 | N/A, disparador | `/api/internal/sync-connections` | `automaticSync.ts`; `tokenRefresh.ts` | listings test parcial; cron diario, latencia hasta 24h posible | PAY-36 |
-| RF-20 | 🟡 | CU-11, CU-08 | Android `payment-hints` | `POST /api/mobile/payment-hints` | handler, parser, servicio Kotlin | sin prueba en dispositivo | PAY-38 |
-| RF-21 | 🟡 | CU-11 | Android | conciliación al ingerir pago | `notificationHintReconciliation.ts` | sin aviso real; matching implementado | PAY-38 |
+| RF-20 | 🟡 | CU-11, CU-08 | Android `payment-hints` + `after()` sync | `POST /api/mobile/payment-hints` | handler, parser, servicio Kotlin, sincronización en background | sin prueba real Android/MP; tests automáticos de este flujo no añadidos | PAY-38 |
+| RF-21 | 🟡 | CU-11 | Android | conciliación al ingerir pago | `notificationHintReconciliation.ts`; sync inmediato | sin prueba real; matching existente | PAY-38 |
 | RF-22 | 🟡 | CU-13 | Integraciones / movimientos | Sync MP | `normalize.ts` | pocos escenarios de normalización | PAY-36 |
 | RNF-01 | 🟡 | CU-08 | rutas servidor | múltiples API | `frontend/lib/server/scope.ts`; `session.ts` | `frontend/tests/server/scope.test.ts` | PAY-12, PAY-17 |
 | RNF-02 | 🟡 | CU-01 | integraciones (sin secreto en UI) | integrations/OAuth | `frontend/lib/payments/secretBox.ts`; `connections.ts` | `frontend/tests/payments/secretBox.test.ts` | PAY-7, PAY-15 |
