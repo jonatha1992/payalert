@@ -1,92 +1,60 @@
-// Rate Limiter simple en memoria
-// NOTA: En producción usar Redis para persistencia entre instancias
+export type RateLimitResult = { allowed: boolean; remaining: number; retryAfter: number };
+export interface RateLimiter { check(key: string): Promise<RateLimitResult> }
+export interface RateLimitConfig { maxRequests: number; windowMs: number }
+type RpcRow = { allowed: boolean; remaining: number; retry_after: number };
+type RateLimitRpc = (key: string, windowSeconds: number, limit: number) => Promise<{ data: unknown; error: unknown }>;
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
+export class MemoryRateLimiter implements RateLimiter {
+  private readonly requests = new Map<string, { count: number; windowStart: number }>();
+  constructor(private readonly config: RateLimitConfig, private readonly now: () => number = Date.now) {
+    if (!Number.isInteger(config.maxRequests) || config.maxRequests < 1 || !Number.isInteger(config.windowMs) || config.windowMs < 1) throw new RangeError('Rate limit must use positive integer limits and windows');
+  }
+  async check(key: string): Promise<RateLimitResult> {
+    const now = this.now(), windowStart = Math.floor(now / this.config.windowMs) * this.config.windowMs;
+    const entry = this.requests.get(key), current = entry?.windowStart === windowStart ? entry : { count: 0, windowStart };
+    current.count += 1; this.requests.set(key, current);
+    if (this.requests.size > 10_000) for (const [storedKey, stored] of this.requests) if (stored.windowStart !== windowStart) this.requests.delete(storedKey);
+    return { allowed: current.count <= this.config.maxRequests, remaining: Math.max(0, this.config.maxRequests - current.count), retryAfter: Math.max(1, Math.ceil((windowStart + this.config.windowMs - now) / 1000)) };
+  }
 }
 
-interface RateLimitConfig {
-  maxRequests: number;
-  windowMs: number;
-}
-
-class RateLimiter {
-  private requests = new Map<string, RateLimitEntry>();
+export class SupabaseRateLimiter implements RateLimiter {
+  private readonly fallback: MemoryRateLimiter;
+  private readonly rpc: RateLimitRpc | null;
   private readonly config: RateLimitConfig;
 
-  constructor(config: RateLimitConfig = { maxRequests: 100, windowMs: 60000 }) {
+  constructor(config: RateLimitConfig, rpc: RateLimitRpc | null,
+    private readonly log: (event: string) => void = (event) => console.error(JSON.stringify({ event })), now: () => number = Date.now) {
+    this.fallback = new MemoryRateLimiter(config, now);
+    this.rpc = rpc;
     this.config = config;
-    // Limpiar entradas expiradas cada 5 minutos
-    setInterval(() => this.cleanup(), 300000);
   }
-
-  // Verificar si el request está permitido
-  isAllowed(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
-    const now = Date.now();
-    const entry = this.requests.get(identifier);
-
-    if (!entry || now > entry.resetTime) {
-      // Nueva ventana de tiempo
-      const resetTime = now + this.config.windowMs;
-      this.requests.set(identifier, {
-        count: 1,
-        resetTime,
-      });
-      return {
-        allowed: true,
-        remaining: this.config.maxRequests - 1,
-        resetTime,
-      };
-    }
-
-    // Ventana existente
-    if (entry.count >= this.config.maxRequests) {
-      return {
-        allowed: false,
-        remaining: 0,
-        resetTime: entry.resetTime,
-      };
-    }
-
-    entry.count++;
-    return {
-      allowed: true,
-      remaining: this.config.maxRequests - entry.count,
-      resetTime: entry.resetTime,
-    };
-  }
-
-  // Limpiar entradas expiradas
-  private cleanup() {
-    const now = Date.now();
-    for (const [key, entry] of this.requests.entries()) {
-      if (now > entry.resetTime) {
-        this.requests.delete(key);
-      }
-    }
-  }
-
-  // Resetear contador para un identificador
-  reset(identifier: string) {
-    this.requests.delete(identifier);
+  async check(key: string): Promise<RateLimitResult> {
+    if (!this.rpc) { this.log('rate_limit_memory_fallback'); return this.fallback.check(key); }
+    try {
+      const { data, error } = await this.rpc(key, Math.ceil(this.config.windowMs / 1000), this.config.maxRequests);
+      if (error) throw error;
+      const row = (Array.isArray(data) ? data[0] : data) as Partial<RpcRow> | null;
+      if (!row || typeof row.allowed !== 'boolean' || !Number.isFinite(Number(row.remaining)) || !Number.isFinite(Number(row.retry_after))) throw new Error('invalid_rate_limit_rpc_result');
+      return { allowed: row.allowed, remaining: Math.max(0, Number(row.remaining)), retryAfter: Math.max(1, Number(row.retry_after)) };
+    } catch { this.log('rate_limit_rpc_fallback'); return this.fallback.check(key); }
   }
 }
 
-// Instancias predefinidas para diferentes casos de uso
-export const webhookRateLimiter = new RateLimiter({
-  maxRequests: 100, // 100 requests
-  windowMs: 60000,  // por minuto
-});
+function createDistributedLimiter(config: RateLimitConfig): RateLimiter {
+  let rpc: RateLimitRpc | null = null;
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (url && key) {
+      const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
+      const client = createClient(url, key, { auth: { persistSession: false } });
+      rpc = async (rateKey, windowSeconds, limit) => client.rpc('rate_limit_hit', { p_key: rateKey, p_window_seconds: windowSeconds, p_limit: limit });
+    }
+  } catch { console.error(JSON.stringify({ event: 'rate_limit_client_unavailable' })); }
+  return new SupabaseRateLimiter(config, rpc);
+}
 
-export const apiRateLimiter = new RateLimiter({
-  maxRequests: 1000, // 1000 requests
-  windowMs: 3600000, // por hora
-});
-
-export const authRateLimiter = new RateLimiter({
-  maxRequests: 5,   // 5 requests
-  windowMs: 60000,  // por minuto
-});
-
-export default RateLimiter;
+export const webhookRateLimiter = createDistributedLimiter({ maxRequests: 100, windowMs: 60_000 });
+export const apiRateLimiter = createDistributedLimiter({ maxRequests: 1000, windowMs: 3_600_000 });
+export const authRateLimiter = createDistributedLimiter({ maxRequests: 5, windowMs: 60_000 });
+export default MemoryRateLimiter;

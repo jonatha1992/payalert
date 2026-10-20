@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { processBatch } from '@/lib/server/webhookWorker';
 import type { QueueRow } from '@/lib/server/webhookQueue';
 
+vi.mock('server-only', () => ({}));
+
 const event = (attempts = 0): QueueRow => ({ id: 'evt-1', provider: 'uala', connection_id: 'conn-1', dedupe_key: 'order-1',
   payload: { rawBody: '{}', headers: {}, query: {} }, status: 'PROCESSING', attempts, next_attempt_at: '', locked_at: null, created_at: '', last_error_code: null });
 function deps(row: QueueRow, fail = false) {
