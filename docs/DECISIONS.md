@@ -32,8 +32,6 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 **Ticket/commit:** PAY-19.
 
-<<<<<<< HEAD
-=======
 
 ## 2026-10-19 — PAY-38: avisos rápidos de transferencias desde Android
 
@@ -65,4 +63,3 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 ## 2026-10-18 — Ramas dev → test → main
 **Decisión:** se creó `test` y se renombró `master` a `main`. Los pushes solo generan deploys Preview; producción (`payalert-kappa`) se despliega a mano con la CLI.
->>>>>>> a104a29 (PAY-38 feat(mobile): accept unconfirmed transfer hints)
