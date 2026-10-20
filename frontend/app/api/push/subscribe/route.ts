@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server/rbac';
-import { getServiceClient, getSessionProfile } from '@/lib/server/session';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // POST /api/push/subscribe - Guardar suscripción de push
 export async function POST(request: NextRequest) {
   try {
-    const profile = requirePermission(await getSessionProfile(request), 'push', 'create');
-    const { subscription } = await request.json();
-    const supabase = getServiceClient();
+    const { subscription, userId } = await request.json();
 
     if (!subscription || !subscription.endpoint) {
       return NextResponse.json(
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
         endpoint: subscription.endpoint,
         p256dh: subscription.keys?.p256dh,
         auth: subscription.keys?.auth,
-        user_id: profile.userId,
+        user_id: userId || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, {

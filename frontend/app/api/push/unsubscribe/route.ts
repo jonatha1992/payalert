@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server/rbac';
-import { getServiceClient, getSessionProfile } from '@/lib/server/session';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // POST /api/push/unsubscribe - Eliminar suscripción de push
 export async function POST(request: NextRequest) {
   try {
-    const profile = requirePermission(await getSessionProfile(request), 'push', 'delete');
     const { endpoint } = await request.json();
-    const supabase = getServiceClient();
 
     if (!endpoint) {
       return NextResponse.json(
@@ -20,8 +22,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase
       .from('push_subscriptions')
       .delete()
-      .eq('endpoint', endpoint)
-      .eq('user_id', profile.userId);
+      .eq('endpoint', endpoint);
 
     if (error) {
       console.error('[Push Unsubscribe] Error:', error);

@@ -1,33 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { RateLimiter } from './rateLimiter';
+import RateLimiter from './rateLimiter';
 
-interface RateLimitOptions { limiter: RateLimiter; key?: (request: NextRequest) => string; getIdentifier?: (request: NextRequest) => string }
-type RateLimitedResponse = NextResponse | Response;
+interface RateLimitOptions {
+  limiter: RateLimiter;
+  getIdentifier?: (req: NextRequest) => string;
+}
 
-export function withRateLimit<C = unknown>(
-  handler: (req: NextRequest, context: C) => Promise<RateLimitedResponse>,
-  options: RateLimitOptions,
-): (req: NextRequest, context: C) => Promise<RateLimitedResponse> {
-  return async (req: NextRequest, context: C): Promise<RateLimitedResponse> => {
-    const identifier = options.getIdentifier?.(req) ?? getClientIP(req);
-    const result = await options.limiter.check(options.key?.(req) ?? `api:${new URL(req.url).pathname}:${identifier}`);
+// Función para obtener IP del request
+export function getClientIP(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  const realIP = req.headers.get('x-real-ip');
+  
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  
+  if (realIP) {
+    return realIP;
+  }
+  
+  return 'unknown';
+}
+
+// Middleware de rate limiting para API routes
+export function withRateLimit(
+  handler: (req: NextRequest) => Promise<NextResponse>,
+  options: RateLimitOptions
+) {
+  return async (req: NextRequest): Promise<NextResponse> => {
+    const identifier = options.getIdentifier 
+      ? options.getIdentifier(req)
+      : getClientIP(req);
+
+    const result = options.limiter.isAllowed(identifier);
+
     if (!result.allowed) {
-      const retryAfter = Math.max(1, Math.ceil(result.retryAfter));
-      return NextResponse.json({ error: 'rate_limit_exceeded', retryAfter }, { status: 429, headers: {
-        'Retry-After': String(retryAfter), 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': String(Math.ceil(Date.now() / 1000) + retryAfter),
-      } });
+      const retryAfter = Math.ceil((result.resetTime - Date.now()) / 1000);
+      
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: 'Too many requests, please try again later',
+          retryAfter,
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': '100',
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': Math.ceil(result.resetTime / 1000).toString(),
+            'Retry-After': retryAfter.toString(),
+          },
+        }
+      );
     }
-    const response = await handler(req, context);
-    response.headers.set('X-RateLimit-Remaining', String(result.remaining));
-    response.headers.set('X-RateLimit-Reset', String(Math.ceil(Date.now() / 1000) + result.retryAfter));
+
+    // Ejecutar handler
+    const response = await handler(req);
+    
+    // Agregar headers de rate limit a la respuesta
+    response.headers.set('X-RateLimit-Limit', '100');
+    response.headers.set('X-RateLimit-Remaining', result.remaining.toString());
+    response.headers.set('X-RateLimit-Reset', Math.ceil(result.resetTime / 1000).toString());
+    
     return response;
   };
-}
-
-export function withRateLimitForIdentifier(handler: (req: NextRequest, context?: unknown) => Promise<NextResponse>, options: Omit<RateLimitOptions, 'key'> & { namespace: string; getIdentifier?: (req: NextRequest) => string }) {
-  return withRateLimit(handler, { limiter: options.limiter, key: (req) => `${options.namespace}:${options.getIdentifier?.(req) ?? getClientIP(req)}` });
-}
-
-export function getClientIP(req: NextRequest): string {
-  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
 }
