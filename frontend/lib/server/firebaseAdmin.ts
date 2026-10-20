@@ -8,6 +8,9 @@ import type { ClientApp } from '@/lib/server/clientApps';
 
 const cache = new Map<string, App>();
 export function firebaseForClientApp(app: ClientApp) {
+  if (!app.firebase_project_id || !app.firebase_sa_encrypted) {
+    throw new Error('Firebase credentials are not configured for this client app');
+  }
   const credentialHash = createHash('sha256').update(app.firebase_sa_encrypted).digest('hex');
   const cacheKey = app.firebase_project_id + ':' + credentialHash;
   let admin = cache.get(cacheKey);
