@@ -6,7 +6,7 @@ Todas las rutas requieren HTTP Bearer autenticando con la API key propia de la a
 
 ## Crear cobro
 
-`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
+`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123", "amount": 5000, "itemTitle": "Cuota" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. Por defecto el servidor fija el importe a `client_apps.deposit_default` e ignora `amount`. Solo cuando `client_apps.allow_amount_override=true`, `amount` opcional debe ser entero ARS entre `min_amount` y `max_amount` (incluidos); un valor inválido devuelve `400 invalid_amount`. `itemTitle`, opcional, admite hasta 80 caracteres sin etiquetas HTML y reemplaza el título predeterminado `Seña`. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y el importe efectivo se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`, pero si cambia el importe devuelve `409 amount_mismatch`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
 
 El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
 
@@ -28,11 +28,11 @@ Los registros y el estado del cobro se mantienen en Supabase (`hub_charges`). El
 
 ## Alta de app
 
-1. Aplicar `docs/migrations/017_client_apps_hub.sql`, `018_hub_creating_status.sql`, `019_hub_hardening.sql` y `020_hub_generic_mode.sql` con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
+1. Aplicar `docs/migrations/017_client_apps_hub.sql`, `018_hub_creating_status.sql`, `019_hub_hardening.sql`, `020_hub_generic_mode.sql` y `021_client_apps_amount_override.sql` con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
 2. Autorizar OAuth MP con `offline_access read write` (o `MP_OAUTH_SCOPES`).
 3. Registrar cada app mediante un proceso administrativo que genere una API key aleatoria y almacene solo su SHA-256 en `client_apps.api_key_hash`. Guardar la clave una sola vez en el sistema de secretos de esa app; no incluirla en código cliente versionado.
 
-En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_encrypted` son nullable y PayAlert no requiere ni usa credenciales Firebase de la app cliente.
+En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_encrypted` son nullable y PayAlert no requiere ni usa credenciales Firebase de la app cliente. Para la app del gimnasio, configurar `allow_amount_override=true` y límites de `min_amount` / `max_amount` en pesos ARS que permitan los importes de cuota y matrícula; los valores globales de base son `1` y `1000000`.
 
 ## Variables
 
