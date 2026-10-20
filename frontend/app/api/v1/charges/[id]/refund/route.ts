@@ -26,7 +26,6 @@ function refundable(date: unknown, time: unknown, now: number): boolean {
 type RefundFirestore = {
   collection: (name: string) => { doc: (id: string) => DocumentReference };
   runTransaction: <T>(callback: (transaction: Transaction) => Promise<T>) => Promise<T>;
-  persistBooking: (bookingId: string) => Promise<void>;
 };
 
 async function updateRefundedBooking(firestore: RefundFirestore, bookingId: string): Promise<void> {
@@ -36,7 +35,6 @@ async function updateRefundedBooking(firestore: RefundFirestore, bookingId: stri
     if (booking.data()?.status !== 'pendiente') throw new Error('booking_not_pending');
     transaction.update(bookingRef, { status: 'reembolsada', 'pago.estado': 'reembolsado' });
   });
-  await firestore.persistBooking(bookingId);
 }
 
 export async function OPTIONS(request: NextRequest) {

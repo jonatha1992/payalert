@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   transactionUpdateCount: 0,
 }));
 vi.mock('@/lib/server/clientApps', () => ({ loadClientApp: mocks.load, originAllowed: mocks.allowed, originAllowedForAnyApp: vi.fn(async () => true) }));
-vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ auth: { verifyIdToken: mocks.verify }, firestore: { collection: (name: string) => name === 'config' ? { doc: () => ({ get: async () => ({ data: () => ({ senia: mocks.configSenia }) }) }) } : { doc: () => ({ get: mocks.getBooking }) }, runTransaction: async (callback: (transaction: { get: typeof mocks.getBooking; update: typeof mocks.updateBooking }) => unknown) => callback({ get: mocks.getBooking, update: (...args: unknown[]) => { mocks.transactionUpdateCount += 1; return mocks.updateBooking(...args); } }) } }) }));
+vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ auth: { verifyIdToken: mocks.verify }, firestore: { collection: (name: string) => name === 'config' ? { doc: () => ({ get: async () => ({ data: () => ({ senia: mocks.configSenia }) }) }) } : { doc: () => ({ get: mocks.getBooking }) }, runTransaction: async (callback: (transaction: { get: typeof mocks.getBooking; update: typeof mocks.updateBooking }) => unknown) => callback({ get: mocks.getBooking, update: vi.fn((...args: unknown[]) => { mocks.transactionUpdateCount += 1; return mocks.updateBooking(...args); }) }) } }) }));
 vi.mock('@/lib/server/hubCharges', () => ({ claimCharge: mocks.create, updateCreatingCharge: mocks.updateCharge, deleteCreatingCharge: mocks.deleteCharge, findCharge: mocks.find }));
 vi.mock('@/lib/server/session', () => ({ getServiceClient: mocks.getService }));
 vi.mock('@/lib/payments/secretBox', () => ({ decryptSecret: mocks.decrypt }));
