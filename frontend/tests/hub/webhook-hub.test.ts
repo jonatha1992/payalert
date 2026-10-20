@@ -16,7 +16,7 @@ function db() {
 }
 const payment = (changes: Record<string, unknown> = {}) => ({ externalReference: 'opaque-ref', externalId: 'mp-1', amount: 1200, currency: 'ARS', status: 'CONFIRMED' as const, ...changes });
 
-beforeEach(() => { vi.resetAllMocks(); Object.assign(mocks.row, { status: 'pending', payment_id: null, firestore_synced: false, last_error: null, expires_at: '2030-01-01T00:00:00.000Z' }); mocks.transition.mockImplementation(async (_id: string, _from: string, to: string, patch: Record<string, unknown>) => { Object.assign(mocks.row, patch, { status: to }); return mocks.row; }); });
+beforeEach(() => { vi.resetAllMocks(); Object.assign(mocks.row, { amount: 1200, status: 'pending', payment_id: null, firestore_synced: false, last_error: null, expires_at: '2030-01-01T00:00:00.000Z' }); mocks.transition.mockImplementation(async (_id: string, _from: string, to: string, patch: Record<string, unknown>) => { Object.assign(mocks.row, patch, { status: to }); return mocks.row; }); });
 
 describe('hub Mercado Pago webhook handling', () => {
   it('confirms an unexpired hub charge without Firestore writes', async () => {

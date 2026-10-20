@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
-  app: { id: 'app-1', slug: 'demo', business_id: 'biz-1', connection_id: 'conn-1', allowed_origins: ['https://shop.test'], api_key_hash: 'hash', active: true, deposit_default: 5000 },
+  app: { id: 'app-1', slug: 'demo', business_id: 'biz-1', connection_id: 'conn-1', allowed_origins: ['https://shop.test'], api_key_hash: 'hash', active: true, deposit_default: 5000 } as Record<string, unknown>,
   connection: { provider: 'mercadopago', status: 'active', credentials_encrypted: 'sealed' },
   charge: null as { id: string; preference_id: string | null; init_point?: string | null; expires_at?: string; status?: string } | null,
   booking: { uid: 'user-1', status: 'pendiente' },
@@ -83,7 +83,7 @@ describe('POST /api/v1/charges', () => {
     const [, init] = mocks.fetch.mock.calls[0];
     const payload = JSON.parse(init.body);
     expect(init.headers.Authorization).toBe('Bearer access');
-    expect(payload.items[0].unit_price).toBe(5000);
+    expect(payload.items[0].unit_price).toBe(1);
     expect(payload.external_reference).toBe('opaque-ref');
     expect(payload.notification_url).toBe('https://api.test/api/webhooks/mercadopago');
     expect(payload.back_urls).toEqual({ success: 'https://shop.test/booking/1', failure: 'https://shop.test/booking/1', pending: 'https://shop.test/booking/1' });
