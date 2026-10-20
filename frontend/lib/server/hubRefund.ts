@@ -1,6 +1,5 @@
 import type { ClientApp } from '@/lib/server/clientApps';
 import { decryptSecret } from '@/lib/payments/secretBox';
-import { firebaseForClientApp } from '@/lib/server/firebaseAdmin';
 import { transitionCharge, type HubCharge } from '@/lib/server/hubCharges';
 
 type RefundDb = { from: (table: string) => any };
@@ -16,7 +15,7 @@ async function requestRefund(row: RefundCharge, db: RefundDb): Promise<RefundRes
   const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(row.payment_id)}/refunds`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `refund:${row.client_apps.id}:${row.booking_id}` },
-    body: JSON.stringify({ amount: row.amount / 100 }),
+    body: JSON.stringify({ amount: row.amount }),
   });
   let result: { status?: unknown };
   try { result = await response.json() as { status?: unknown }; }
@@ -33,14 +32,7 @@ export async function completeRefund(row: RefundCharge, db: RefundDb): Promise<R
   }
   if (result === 'uncertain') return result;
 
-  const { firestore } = firebaseForClientApp(row.client_apps);
-  const bookingRef = firestore.collection('bookings').doc(row.booking_id);
-  await firestore.runTransaction(async (transaction) => {
-    const booking = await transaction.get(bookingRef);
-    if (booking.data()?.status !== 'pendiente') throw new Error('booking_not_pending');
-    transaction.update(bookingRef, { status: 'reembolsada', 'pago.estado': 'reembolsado' });
-  });
-  const completed = await transitionCharge(row.id, 'refunding', 'refunded', { firestore_synced: true, last_error: null });
+  const completed = await transitionCharge(row.id, 'refunding', 'refunded', { last_error: null });
   if (!completed) throw new Error('refund_charge_transition_lost');
   return result;
 }
