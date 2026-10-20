@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!claimed) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
     }
     chargeId = charge.id;
-    const result = await completeRefund({ ...charge, client_apps: app }, getServiceClient());
+    const result = await completeRefund({ ...charge, booking_id: bookingId, client_apps: app }, getServiceClient());
     if (result === 'rejected') {
       chargeId = null;
       return NextResponse.json({ error: 'refund_failed' }, { status: 400, headers });

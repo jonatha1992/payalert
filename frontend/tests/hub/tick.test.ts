@@ -4,7 +4,7 @@ const state = vi.hoisted(() => ({ query: '', updated: [] as unknown[], deleted: 
 const expiredRows = [{ id: 'charge-1', booking_id: 'booking-1', status: 'pending', expires_at: '2000-01-01T00:00:00Z', client_apps: { id: 'app' } }];
 vi.mock('@/lib/server/session', () => ({
   getServiceClient: () => ({ from: () => {
-    const queryState = { status: '', synced: '', pending: false };
+    const queryState = { status: '', synced: '', pending: false, creating: false, data: [] as unknown[] };
     const query = {
       select: () => query,
       delete: () => { queryState.creating = true; return query; },
