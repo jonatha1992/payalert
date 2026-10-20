@@ -26,7 +26,7 @@ const request = (data: unknown, origin = 'https://shop.test') => new NextRequest
 
 describe('POST /api/v1/charges', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.charge = null; mocks.booking = { uid: 'user-1', status: 'pendiente' }; mocks.configSenia = 5000; mocks.owner = 'user-1'; mocks.tokenValid = true; mocks.connectionData = mocks.connection; mocks.connectionError = null; mocks.transactionUpdateCount = 0;
+    vi.resetAllMocks(); mocks.charge = null; mocks.booking = { uid: 'user-1', status: 'pendiente' }; mocks.configSenia = 5000; mocks.owner = 'user-1'; mocks.tokenValid = true; mocks.connectionData = mocks.connection; mocks.connectionError = null; mocks.transactionUpdateCount = 0;
     mocks.load.mockResolvedValue(mocks.app); mocks.allowed.mockImplementation((_app, origin) => origin === 'https://shop.test');
     mocks.verify.mockImplementation(async () => { if (!mocks.tokenValid) throw new Error('bad token'); return { uid: mocks.owner }; });
     mocks.getBooking.mockImplementation(async () => ({ exists: true, data: () => mocks.booking }));
