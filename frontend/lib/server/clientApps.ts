@@ -7,6 +7,7 @@ export type ClientApp = {
   api_key_hash: string; active: boolean;
   deposit_default: number;
   connect_return_url: string | null;
+  item_title: string | null;
 };
 
 export async function loadClientApp(slug: string): Promise<ClientApp | null> {

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
     claimedId = claim.charge.id;
     const payload = {
-      items: [{ title: 'Seña', quantity: 1, currency_id: 'ARS', unit_price: amount }],
+      items: [{ title: (app.item_title?.trim() || 'Seña').slice(0, 120), quantity: 1, currency_id: 'ARS', unit_price: amount }],
       payer: body.payerEmail ? { email: body.payerEmail } : undefined,
       external_reference: externalReference,
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
