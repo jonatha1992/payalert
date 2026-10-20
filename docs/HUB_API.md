@@ -2,6 +2,8 @@
 
 Hub de cobros genérico para apps cliente, con o sin Firebase. PayAlert no almacena ni utiliza credenciales externas de Firebase: el estado del cobro vive en Supabase (`hub_charges`). Cada app cliente se identifica con su propia API key y solo puede consultar/modificar cobros vinculados a esa app.
 
+> Antes de publicar este código, aplicar `docs/migrations/021_client_apps_item_title.sql`: la autenticación consulta `client_apps` mediante `select('*')` y requiere la columna `item_title`.
+
 Todas las rutas requieren HTTP Bearer autenticando con la API key propia de la app. El Origin debe estar incluido exactamente en `client_apps.allowed_origins`. La comparación de la clave se realiza con SHA-256 y comparación en tiempo constante. Las operaciones sobre cobros deben aislar por `client_app_id`; las operaciones que consulten conexiones de pago también deben comprobar conjuntamente `connection_id` y `business_id`.
 
 ## Crear cobro
@@ -26,7 +28,12 @@ Cada operación valida la API key activa y el Origin permitido, y limita el cobr
 
 Los registros y el estado del cobro se mantienen en Supabase (`hub_charges`). El webhook de Mercado Pago valida importe y moneda contra el registro autoritativo y actualiza el estado; `payment_id` se devuelve en el endpoint de consulta una vez disponible. Los estados posibles incluyen `creating`, `pending`, `approved`, `rejected`, `expired`, `refunding`, `refunded` y `needs_refund`.
 
-## Alta de app
+## Alta de la app del gimnasio
+
+1. Aplicar `docs/migrations/021_client_apps_item_title.sql` antes de publicar este código.
+2. Registrar la app con `deposit_default=1000` e `item_title='Cuota mensual'`.
+3. Completar `allowed_origins` con los origins exactos del gimnasio.
+4. Generar una API key aparte y guardarla como secreto en las Cloud Functions del gimnasio; almacenar solo su SHA-256 en `client_apps.api_key_hash`. No incluir valores reales ni claves en código o documentación.
 
 1. Aplicar `docs/migrations/017_client_apps_hub.sql`, `018_hub_creating_status.sql`, `019_hub_hardening.sql` y `020_hub_generic_mode.sql` con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
 2. Autorizar OAuth MP con `offline_access read write` (o `MP_OAUTH_SCOPES`).

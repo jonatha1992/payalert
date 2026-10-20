@@ -6,6 +6,7 @@ export type ClientApp = {
   allowed_origins: string[];
   api_key_hash: string; active: boolean;
   deposit_default: number;
+  item_title: string | null;
 };
 
 export async function loadClientApp(slug: string): Promise<ClientApp | null> {
