@@ -84,3 +84,10 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 **Impacto:** fallos y resultados de intentos se registran. La restricción anti-abuso es por instancia, no distribuida. No hay prueba real Android/MP ni servicios externos usados en este cambio.
 
 **Ticket/commit:** PAY-38.
+
+
+## 2026-10-19 — PAY-38: aislar sincronización inmediata y push idempotente
+
+**Decisión:** extraer el ciclo de sync a `frontend/lib/payments/hintSync.ts` con dependencias inyectadas; enviar push confirmado solo al afectar una fila con cambio condicional PENDING→CONFIRMED.
+
+**Impacto:** la sincronización reutiliza ingestión existente, que reconcilia hint único al guardar pago real; dashboard excluye transacciones pending.
