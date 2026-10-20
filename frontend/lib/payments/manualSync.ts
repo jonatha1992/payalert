@@ -21,10 +21,10 @@ export async function syncConnectionPayments(connection: PaymentConnection, depe
   let payments: NormalizedTransaction[];
   try {
     payments = await dependencies.listTransactions(connection);
-  } catch {
+  } catch (cause) {
     dependencies.log({ event: 'manual_sync', connectionId: connection.id, businessId: connection.businessId,
       outcome: 'provider_error', checked: 0, newlyProcessed: 0 });
-    throw new Error('provider_sync_failed');
+    throw new Error('provider_sync_failed', { cause });
   }
 
   let newlyProcessed = 0;
@@ -33,10 +33,10 @@ export async function syncConnectionPayments(connection: PaymentConnection, depe
       && payment.providerAccountId !== connection.providerAccountId)) throw new Error('provider_sync_account_mismatch');
     try {
       if (await dependencies.ingest(connection, payment) === 'processed') newlyProcessed += 1;
-    } catch {
+    } catch (cause) {
       dependencies.log({ event: 'manual_sync', connectionId: connection.id, businessId: connection.businessId,
         outcome: 'ingest_error', checked: payments.length, newlyProcessed });
-      throw new Error('provider_sync_ingest_failed');
+      throw new Error('provider_sync_ingest_failed', { cause });
     }
   }
   const lastSyncAt = now().toISOString();
