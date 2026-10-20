@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { loadClientApp, originAllowedForAnyApp } from '@/lib/server/clientApps';
+import { originAllowedForAnyApp } from '@/lib/server/clientApps';
 import { authenticateClientApp } from '@/lib/server/hubAuth';
 import { claimCharge, updateCreatingCharge } from '@/lib/server/hubCharges';
-import { corsHeaders, AUTH_SCHEME } from '@/lib/server/hubHttp';
+import { corsHeaders } from '@/lib/server/hubHttp';
 import { getServiceClient } from '@/lib/server/session';
 import { decryptSecret } from '@/lib/payments/secretBox';
 
@@ -23,8 +23,10 @@ async function deleteCreatingClaim(id: string) {
 }
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get('origin');
-  if (origin && await originAllowedForAnyApp(origin)) return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
-  return new NextResponse(null, { status: 403 });
+  if (!origin || !await originAllowedForAnyApp(origin)) return new NextResponse(null, { status: 403 });
+  const requestedHeaders = request.headers.get('access-control-request-headers')?.split(',').map((header) => header.trim().toLowerCase()) ?? [];
+  if (requestedHeaders.some((header) => !['authorization', 'content-type'].includes(header))) return new NextResponse(null, { status: 403 });
+  return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
 }
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');

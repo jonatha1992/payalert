@@ -9,7 +9,10 @@ const DAY_MS = 86_400_000;
 
 export async function OPTIONS(request: NextRequest) {
   const auth = await authenticateClientApp(request);
-  return auth.app ? new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')!) }) : auth.response!;
+  if (!auth.app) return auth.response!;
+  const requestedHeaders = request.headers.get('access-control-request-headers')?.split(',').map((header) => header.trim().toLowerCase()) ?? [];
+  if (requestedHeaders.some((header) => !['authorization', 'content-type'].includes(header))) return new NextResponse(null, { status: 403 });
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')!) });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
