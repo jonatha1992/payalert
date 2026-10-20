@@ -14,6 +14,10 @@ function validBody(value: unknown): value is { app: string; bookingId: string } 
   return typeof body.app === 'string' && !!body.app.trim() && typeof body.bookingId === 'string' && !!body.bookingId.trim();
 }
 function configuredDeposit(value: unknown): number { return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 1_000_000 ? value : 5000; }
+async function deleteCreatingClaim(id: string) {
+  const { error } = await getServiceClient().from('hub_charges').delete().eq('id', id).eq('status', 'creating');
+  if (error) throw error;
+}
 export async function OPTIONS(request: NextRequest) {
   const origin = request.headers.get('origin');
   if (origin && await originAllowedForAnyApp(origin)) return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
@@ -23,6 +27,7 @@ export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
   let headers: Record<string, string> = {};
   let claimedId: string | null = null;
+  let rollbackBooking: (() => Promise<void>) | null = null;
   try {
     let body: unknown;
     try { body = await request.json(); } catch { return jsonError('invalid_request', 400); }
@@ -43,12 +48,11 @@ export async function POST(request: NextRequest) {
     const config = await firestore.collection('config').doc('pagos').get();
     const amount = configuredDeposit(config.data()?.senia);
     const { data: connection, error: connectionError } = await getServiceClient().from('payment_connections')
-      .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).single();
-    if (connectionError) throw connectionError;
-    if (connection.provider !== 'mercadopago' || connection.status !== 'active') return jsonError('connection_unavailable', 409, headers);
+      .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
+    if (!app.connection_id || connectionError || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') return NextResponse.json({ error: 'connection_unavailable', message: 'La dueña todavía no conectó Mercado Pago' }, { status: 409, headers });
     const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token?: string };
     const token = credentials.access_token?.trim();
-    if (!token) return jsonError('connection_unavailable', 409, headers);
+    if (!token) return NextResponse.json({ error: 'connection_unavailable', message: 'La dueña todavía no conectó Mercado Pago' }, { status: 409, headers });
     const expires = new Date(Date.now() + 15 * 60_000);
     const externalReference = randomUUID();
     const idempotencyKey = `${app.id}:${body.bookingId}`;
@@ -65,7 +69,17 @@ export async function POST(request: NextRequest) {
       transaction.update(bookingRef, { 'pago.estado': 'pendiente', preferenceId: 'creating', pagoVenceEn: expires });
       return 200;
     });
-    if (status !== 200) return jsonError(status === 404 ? 'booking_not_found' : 'booking_not_pending', status, headers);
+    if (status !== 200) {
+      await deleteCreatingClaim(claimedId);
+      claimedId = null;
+      return jsonError(status === 404 ? 'booking_not_found' : 'booking_not_pending', status, headers);
+    }
+    rollbackBooking = async () => firestore.runTransaction(async (transaction) => {
+      const current = await transaction.get(bookingRef);
+      if (current.exists && current.data()?.uid === decoded.uid && current.data()?.status === 'pendiente' && current.data()?.preferenceId === 'creating') {
+        transaction.update(bookingRef, { 'pago.estado': 'pendiente', preferenceId: null, pagoVenceEn: null });
+      }
+    });
     const payload = {
       items: [{ title: 'Seña de turno', quantity: 1, currency_id: 'ARS', unit_price: amount }],
       external_reference: externalReference,
@@ -96,8 +110,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ init_point: validPreference.init_point, chargeId: claimedId }, { headers });
   } catch (error) {
     if (claimedId) {
-      try { await updateCreatingCharge(claimedId, { last_error: error instanceof Error ? error.name : 'charge_creation_failed' }); }
-      catch (updateError) { console.error('hub_charge_claim_update_failed', updateError instanceof Error ? updateError.name : 'unknown'); }
+      try {
+        if (rollbackBooking) await rollbackBooking();
+      } catch (rollbackError) {
+        console.error('hub_charge_booking_rollback_failed', rollbackError instanceof Error ? rollbackError.name : 'unknown');
+      }
+      try { await deleteCreatingClaim(claimedId); }
+      catch (deleteError) { console.error('hub_charge_claim_delete_failed', deleteError instanceof Error ? deleteError.name : 'unknown'); }
     }
     console.error('hub_charge_create_failed', error instanceof Error ? error.name : 'unknown');
     return jsonError('charge_creation_failed', 500, headers);
