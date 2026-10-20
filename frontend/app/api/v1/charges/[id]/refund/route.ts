@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loadClientApp, originAllowed } from '@/lib/server/clientApps';
 import { firebaseForClientApp } from '@/lib/server/firebaseAdmin';
 import { findCharge, transitionCharge } from '@/lib/server/hubCharges';
+import { completeRefund } from '@/lib/server/hubRefund';
 import { corsHeaders, AUTH_SCHEME } from '@/lib/server/hubHttp';
 import { getServiceClient } from '@/lib/server/session';
-import { decryptSecret } from '@/lib/payments/secretBox';
 import type { DocumentReference, Transaction } from 'firebase-admin/firestore';
 
 const DAY_MS = 86_400_000;
@@ -21,20 +21,6 @@ function refundable(date: unknown, time: unknown, now: number): boolean {
   if (typeof date !== 'string' || typeof time !== 'string' || !isValidDate(date) || !TIME_FORMAT.test(time)) return false;
   const timestamp = new Date(`${date}T${time}:00-03:00`).getTime();
   return Number.isFinite(timestamp) && timestamp - now >= DAY_MS;
-}
-
-type RefundFirestore = {
-  collection: (name: string) => { doc: (id: string) => DocumentReference };
-  runTransaction: <T>(callback: (transaction: Transaction) => Promise<T>) => Promise<T>;
-};
-
-async function updateRefundedBooking(firestore: RefundFirestore, bookingId: string): Promise<void> {
-  const bookingRef = firestore.collection('bookings').doc(bookingId);
-  await firestore.runTransaction(async (transaction) => {
-    const booking = await transaction.get(bookingRef);
-    if (booking.data()?.status !== 'pendiente') throw new Error('booking_not_pending');
-    transaction.update(bookingRef, { status: 'reembolsada', 'pago.estado': 'reembolsado' });
-  });
 }
 
 export async function OPTIONS(request: NextRequest) {
@@ -84,34 +70,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!claimed) return NextResponse.json({ error: 'payment_not_refundable' }, { status: 409, headers });
     }
     chargeId = charge.id;
-    const { data: connection, error } = await getServiceClient().from('payment_connections').select('credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).single();
-    if (error) throw error;
-    const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token: string };
-    const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(charge.payment_id)}/refunds`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `refund:${app.id}:${bookingId}` },
-      body: JSON.stringify({ amount: charge.amount / 100 }),
-    });
-    let refund: { status?: unknown };
-    try {
-      refund = await response.json() as { status?: unknown };
-    } catch {
-      if (response.status >= 400 && response.status < 500) {
-        await transitionCharge(charge.id, 'refunding', 'approved', { last_error: 'refund_rejected' });
-        chargeId = null;
-        return NextResponse.json({ error: 'refund_failed' }, { status: response.status, headers });
-      }
-      throw new Error(`Mercado Pago refund outcome unavailable (${response.status})`);
-    }
-    if (response.status >= 400 && response.status < 500) {
-      await transitionCharge(charge.id, 'refunding', 'approved', { last_error: 'refund_rejected' });
+    const result = await completeRefund({ ...charge, client_apps: app }, getServiceClient());
+    if (result === 'rejected') {
       chargeId = null;
-      return NextResponse.json({ error: 'refund_failed' }, { status: response.status, headers });
+      return NextResponse.json({ error: 'refund_failed' }, { status: 400, headers });
     }
-    if (!response.ok || refund.status !== 'approved') throw new Error(`Mercado Pago refund failed (${response.status})`);
-    await updateRefundedBooking(firestore, bookingId);
-    const completed = await transitionCharge(charge.id, 'refunding', 'refunded', { firestore_synced: true, last_error: null });
-    if (!completed) throw new Error('refund_charge_transition_lost');
+    if (result === 'uncertain') throw new Error('Mercado Pago refund outcome unavailable');
     chargeId = null;
     return NextResponse.json({ status: 'refunded' }, { headers });
   } catch (error) {

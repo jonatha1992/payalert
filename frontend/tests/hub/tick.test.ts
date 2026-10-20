@@ -7,9 +7,11 @@ vi.mock('@/lib/server/session', () => ({
     const queryState = { status: '', synced: '', pending: false };
     const query = {
       select: () => query,
+      delete: () => query,
       eq: (key: string, value: unknown) => { if (key === 'status') queryState.status = String(value); if (key === 'firestore_synced') queryState.synced = String(value); return query; },
-      lt: () => { queryState.pending = true; return query; },
+      lt: (key: string) => { if (queryState.status !== "creating") queryState.pending = true; return query; },
       in: () => query,
+      then: (resolve: (value: { data: unknown[]; error: null }) => void) => resolve({ data: [{ id: "stale-claim" }], error: null }),
       order: () => query,
       limit: async () => {
         if (queryState.pending) return { data: state.retryRows || state.transitionResult ? expiredRows : [], error: null };

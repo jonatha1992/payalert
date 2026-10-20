@@ -4,6 +4,7 @@ import { getServiceClient } from '@/lib/server/session';
 import { firebaseForClientApp } from '@/lib/server/firebaseAdmin';
 import { transitionCharge, type HubCharge } from '@/lib/server/hubCharges';
 import type { ClientApp } from '@/lib/server/clientApps';
+import { deleteStaleCreatingClaims, reconcileStaleRefund } from '@/lib/server/hubRefund';
 
 type TickCharge = HubCharge & { client_apps: ClientApp };
 const syncUpdates: Record<HubCharge['status'], Record<string, string> | null> = {
@@ -66,6 +67,19 @@ export async function POST(request: NextRequest) {
   try {
     const db = getServiceClient();
     let expiredCount = 0;
+    const staleCreating = await deleteStaleCreatingClaims(db);
+    let reconciledRefunds = 0;
+    const staleRefundCutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+    const { data: refundRows, error: refundError } = await db.from('hub_charges').select('*,client_apps(*)').eq('status', 'refunding').lt('updated_at', staleRefundCutoff).limit(1000);
+    if (refundError) throw refundError;
+    for (const row of (refundRows ?? []) as TickCharge[]) {
+      try {
+        if (await reconcileStaleRefund(db, row)) reconciledRefunds += 1;
+      } catch (error) {
+        const { error: updateError } = await db.from('hub_charges').update({ last_error: error instanceof Error ? error.name : 'refund_reconcile_error' }).eq('id', row.id).eq('status', 'refunding');
+        if (updateError) throw updateError;
+      }
+    }
     for (let batch = 0; batch < 100; batch += 1) {
       const { data: rows, error } = await db.from('hub_charges').select('*,client_apps(*)').eq('status', 'pending').lt('expires_at', new Date().toISOString()).limit(100);
       if (error) throw error;
@@ -93,7 +107,7 @@ export async function POST(request: NextRequest) {
       }
       if (rows.length < 100) break;
     }
-    return NextResponse.json({ expired: expiredCount, retried: retriedCount });
+    return NextResponse.json({ expired: expiredCount, retried: retriedCount, staleCreating, reconciledRefunds });
   } catch (error) {
     console.error('hub_tick_failed', error instanceof Error ? `${error.name}: ${error.message}` : 'unknown');
     return NextResponse.json({ error: 'tick_failed' }, { status: 500 });
