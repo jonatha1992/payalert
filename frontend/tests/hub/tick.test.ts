@@ -49,6 +49,12 @@ describe('POST /api/internal/hub-tick', () => {
     await POST(req('cron-secret'));
     expect(state.pages).toBe(2);
   });
+  it('deletes creating claims older than five minutes', async () => {
+    const response = await POST(req('cron-secret'));
+    expect(response.status).toBe(200);
+    expect((await response.json()).staleCreating).toBe(1);
+  });
+
   it('marks only needs_refund as synced without editing its booking', async () => {
     state.currentStatus = 'needs_refund';
     state.retryRows = true;
