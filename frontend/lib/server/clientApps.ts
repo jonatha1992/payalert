@@ -2,10 +2,10 @@ import 'server-only';
 import { getServiceClient } from '@/lib/server/session';
 
 export type ClientApp = {
-  id: string; slug: string; business_id: string; connection_id: string;
-  allowed_origins: string[]; firebase_project_id: string | null; firebase_sa_encrypted: string | null;
+  id: string; slug: string; business_id: string; connection_id: string | null;
+  allowed_origins: string[];
   api_key_hash: string; active: boolean;
-  admin_emails: string[]; deposit_default: number;
+  deposit_default: number;
 };
 
 export async function loadClientApp(slug: string): Promise<ClientApp | null> {
