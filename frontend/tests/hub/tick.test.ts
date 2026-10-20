@@ -25,17 +25,19 @@ vi.mock('@/lib/server/session', () => ({
     };
     return query;
   } }) }));
-vi.mock('@/lib/server/firebaseAdmin', () => ({ firebaseForClientApp: () => ({ firestore: { runTransaction: async (fn: (transaction: { get: (ref: unknown) => Promise<{ exists: boolean; data: () => { status: string } }>; update: (ref: unknown, data: unknown) => void; delete: (_ref: never) => void }) => Promise<unknown>) => fn({ get: async (ref) => ref && typeof ref === 'object' && 'where' in ref ? ({ docs: [{ ref: { id: 'owned-slot' }, data: () => ({ bookingId: 'booking-1' }) }, { ref: { id: 'foreign-slot' }, data: () => ({ bookingId: 'booking-2' }) }] } as never) : ({ exists: true, data: () => ({ status: state.bookingStatus }) }), update: (_ref, data) => { state.updated.push(data); }, delete: (_ref: never) => { state.deleted.push({ id: 'slot-1' }); } }), collection: (name: string) => name === 'bookings' ? { doc: (id: string) => ({ id, get: async () => ({ exists: true, data: () => ({ status: state.bookingStatus }) }) }) } : { where: () => ({ where: 'slots-query' }) } } }) }));
+
 vi.mock('@/lib/server/hubCharges', () => ({ transitionCharge: vi.fn(async (_id: string, from: string, to: string, patch: unknown) => { state.updated.push(patch); if (state.currentStatus === 'pending') return state.transitionResult ? { id: 'charge-1', status: to } : null; return { id: 'charge-1', status: to }; }) }));
 import { POST } from '@/app/api/internal/hub-tick/route';
 const req = (secret: string) => new NextRequest('https://api.test/api/internal/hub-tick', { method: 'POST', headers: { 'x-hub-cron-secret': secret } });
 describe('POST /api/internal/hub-tick', () => {
-  beforeEach(() => { vi.clearAllMocks(); state.query = ''; state.updated = []; state.deleted = []; state.bookingStatus = 'pendiente'; state.transitionResult = true; state.deleteExpected = false; state.pages = 0; state.currentStatus = ''; state.retryRows = false; process.env.HUB_CRON_SECRET = 'cron-secret'; });
+  beforeEach(() => { vi.resetAllMocks(); state.query = ''; state.updated = []; state.deleted = []; state.bookingStatus = 'pendiente'; state.transitionResult = true; state.deleteExpected = false; state.pages = 0; state.currentStatus = ''; state.retryRows = false; process.env.HUB_CRON_SECRET = 'cron-secret'; });
   it('rejects an invalid cron secret without querying charges', async () => { expect((await POST(req('wrong'))).status).toBe(401); expect(state.query).toBe(''); });
-  it('claims an expiring row before attempting booking changes', async () => {
+  it('expires only the hub charge with a pending-to-expired CAS', async () => {
     const response = await POST(req('cron-secret'));
     expect(response.status).toBe(200);
-    expect(state.updated).toContainEqual({ status: 'expirada', pagoExpiradoEn: expect.any(Date) });
+    expect(state.updated).toContainEqual({ last_error: null });
+    expect(state.updated).not.toContainEqual(expect.objectContaining({ status: 'expirada' }));
+    expect(state.deleted).toHaveLength(1);
   });
   it('skips booking and slot changes when the claim CAS loses', async () => {
     state.transitionResult = false;
@@ -43,23 +45,12 @@ describe('POST /api/internal/hub-tick', () => {
     expect(state.updated).not.toContainEqual({ status: 'expirada', pagoExpiradoEn: expect.any(Date) });
     expect(state.deleted).toHaveLength(1);
   });
-  it('paginates retry rows until no more rows remain', async () => {
-    state.currentStatus = 'approved';
-    state.retryRows = true;
-    await POST(req('cron-secret'));
-    expect(state.pages).toBe(2);
-  });
+  it('does not retry Firestore synchronization rows', async () => { state.currentStatus = 'approved'; state.retryRows = true; const response = await POST(req('cron-secret')); expect(state.pages).toBe(0); expect(await response.json()).not.toHaveProperty('retried'); });
   it('deletes creating claims older than five minutes', async () => {
     const response = await POST(req('cron-secret'));
     expect(response.status).toBe(200);
     expect((await response.json()).staleCreating).toBe(1); expect(Date.now() - Date.parse(state.deleted[0].id)).toBeGreaterThanOrEqual(300_000);
   });
 
-  it('marks only needs_refund as synced without editing its booking', async () => {
-    state.currentStatus = 'needs_refund';
-    state.retryRows = true;
-    await POST(req('cron-secret'));
-    expect(state.updated).toContainEqual(expect.objectContaining({ firestore_synced: true }));
-    expect(state.updated).not.toContainEqual(expect.objectContaining({ status: 'confirmada' }));
-  });
+  it('does not mark needs_refund synced or touch Firestore', async () => { state.currentStatus = 'needs_refund'; state.retryRows = true; const response = await POST(req('cron-secret')); expect(state.updated).not.toContainEqual(expect.objectContaining({ firestore_synced: true })); expect(await response.json()).not.toHaveProperty('retried'); });
 });
