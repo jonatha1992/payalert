@@ -6,7 +6,7 @@ Todas las rutas requieren HTTP Bearer autenticando con la API key propia de la a
 
 ## Crear cobro
 
-`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "amount": 1000, "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; `payerRef` es opaco para PayAlert. `payerEmail` y `amount` son opcionales. El servidor siempre fija el importe a `client_apps.deposit_default`; el valor `amount` enviado por el cliente se ignora en este contrato. `returnUrl`, cuando se envía, debe comenzar con uno de los valores exactos de `allowed_origins` de la app. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`.
+`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
 
 El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
 
@@ -16,11 +16,11 @@ El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con
 
 ## Reembolso
 
-`POST /api/v1/charges/{bookingId}/refund` usa la misma API key y validación de `Origin`. El booking debe corresponder a un cobro de la app autenticada. Responde `{ "status": "refunded" }` cuando finaliza o `{ "status": "refunding" }` mientras el resultado continúa en conciliación.
+`POST /api/v1/charges/{bookingId}/refund` usa la misma API key y validación de `Origin`. El booking debe corresponder a un cobro aprobado de la app autenticada. La app puede enviar `{ "eventStartsAt": "2030-01-02T15:00:00.000Z" }`; si se incluye, PayAlert devuelve `409 refund_window_closed` cuando faltan menos de 24 horas. PayAlert no consulta Firestore ni aplica políticas de agenda propias. El reembolso usa CAS `approved -> refunding -> refunded`; el resultado ambiguo permanece `refunding` para conciliación y un rechazo definitivo del proveedor vuelve a `approved`. Responde `{ "status": "refunded" }` o `{ "status": "refunding" }`.
 
 ## Aislamiento y validaciones
 
-Cada operación valida la API key activa y el Origin permitido, y limita el cobro por `client_app_id` de la app autenticada. Al acceder a la conexión de pago, se filtra por `connection_id` y `business_id` de esa misma app. Las respuestas de autenticación inválida/inactiva y Origin no permitido son genéricas y no revelan cuál de esas validaciones falló. La URL de retorno debe comenzar con un `allowed_origin` de la app.
+Cada operación valida la API key activa y el Origin permitido, y limita el cobro por `client_app_id` de la app autenticada. Al acceder a la conexión de pago, se filtra por `connection_id` y `business_id` de esa misma app. Las respuestas de autenticación inválida/inactiva y Origin no permitido son genéricas y no revelan cuál de esas validaciones falló. PayAlert confía en la app cliente para autorizar usuarios y decidir quién puede pagar o reembolsar; no lee ni escribe Firebase/Firestore. `returnUrl` debe comenzar con una URL autorizada.
 
 ## Estado del cobro
 
@@ -44,4 +44,4 @@ En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_
 
 ## Tick
 
-`POST /api/internal/hub-tick`, header `x-hub-cron-secret`. Workflow `hub-tick.yml` lo llama cada cinco minutos para procesar cobros vencidos y conciliaciones pendientes.
+`POST /api/internal/hub-tick`, header `x-hub-cron-secret`. Workflow `hub-tick.yml` lo llama cada cinco minutos: solo vence cobros `pending` al superar sus 15 minutos de expiración, elimina claims `creating` antiguos y reconcilia reembolsos `refunding`. No sincroniza ni consulta Firestore.
