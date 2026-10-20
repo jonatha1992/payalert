@@ -31,6 +31,13 @@ describe('hub Mercado Pago webhook handling', () => {
       expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ last_error: 'payment_amount_or_currency_mismatch' }));
       expect(mocks.transition).not.toHaveBeenCalled();
     });
+  it('compares the provider payment against the stored charge amount and currency', async () => {
+    mocks.row.amount = 3500;
+    await applyHubPayment(payment({ amount: 3500 }), db());
+    expect(mocks.row.status).toBe('approved');
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.transition).toHaveBeenCalledWith('charge-1', 'pending', 'approved', expect.any(Object));
+  });
   it('marks a late approval needs_refund and never confirms the booking', async () => {
     mocks.row.expires_at = '2000-01-01T00:00:00.000Z';
     await applyHubPayment(payment(), db());

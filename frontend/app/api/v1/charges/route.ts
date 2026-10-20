@@ -17,6 +17,18 @@ function validBody(value: unknown): value is { bookingId: string; payerRef: stri
     && typeof body.returnUrl === 'string' && !!body.returnUrl.trim();
 }
 function configuredDeposit(value: unknown): number { return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 1_000_000 ? value : 5000; }
+function requestedAmount(body: Record<string, unknown>, app: { allow_amount_override?: boolean; min_amount?: number; max_amount?: number; deposit_default: number }, amountRequested: boolean): number | null {
+  if (!app.allow_amount_override || !amountRequested) return configuredDeposit(app.deposit_default);
+  const min = app.min_amount ?? 1;
+  const max = app.max_amount ?? 1_000_000;
+  return typeof body.amount === 'number' && Number.isSafeInteger(body.amount) && min <= body.amount && body.amount <= max ? body.amount : null;
+}
+function itemTitle(value: unknown, overrideEnabled: boolean): string | null {
+  if (value === undefined) return 'Seña';
+  if (!overrideEnabled) return 'Seña';
+  if (typeof value !== 'string' || value.length > 80 || /[<>]/.test(value)) return null;
+  return value.trim() || null;
+}
 async function deleteCreatingClaim(id: string) {
   const { error } = await getServiceClient().from('hub_charges').delete().eq('id', id).eq('status', 'creating');
   if (error) throw error;
@@ -40,7 +52,11 @@ export async function POST(request: NextRequest) {
     try { body = await request.json(); } catch { return jsonError('invalid_request', 400, headers); }
     if (!validBody(body)) return jsonError('invalid_request', 400, headers);
     if (!app.allowed_origins.some((allowed) => body.returnUrl.startsWith(allowed))) return jsonError('return_url_denied', 400, headers);
-    const amount = configuredDeposit(app.deposit_default);
+    const bodyRecord = body as unknown as Record<string, unknown>;
+    const amount = requestedAmount(bodyRecord, app, Object.hasOwn(bodyRecord, 'amount'));
+    const title = itemTitle(bodyRecord.itemTitle, app.allow_amount_override === true);
+    if (amount === null) return jsonError('invalid_amount', 400, headers);
+    if (title === null) return jsonError('invalid_request', 400, headers);
     const { data: connection, error: connectionError } = await getServiceClient().from('payment_connections')
       .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
     if (!app.connection_id || connectionError || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });
@@ -52,12 +68,13 @@ export async function POST(request: NextRequest) {
     const idempotencyKey = `${app.id}:${body.bookingId}`;
     const claim = await claimCharge({ client_app_id: app.id, booking_id: body.bookingId, external_reference: externalReference, amount, currency: 'ARS', expires_at: expires.toISOString(), idempotency_key: idempotencyKey, payer_ref: body.payerRef, return_url: body.returnUrl });
     if (!claim.created) {
-      if (claim.charge.init_point) return NextResponse.json({ chargeId: claim.charge.id, checkoutUrl: claim.charge.init_point, expiresAt: claim.charge.expires_at, status: claim.charge.status }, { headers });
-      return jsonError('charge_in_progress', 409, headers);
+      if (!claim.charge.init_point) return jsonError('charge_in_progress', 409, headers);
+      if (claim.charge.amount !== amount) return jsonError('amount_mismatch', 409, headers);
+      return NextResponse.json({ chargeId: claim.charge.id, checkoutUrl: claim.charge.init_point, expiresAt: claim.charge.expires_at, status: claim.charge.status }, { headers });
     }
     claimedId = claim.charge.id;
     const payload = {
-      items: [{ title: 'Seña', quantity: 1, currency_id: 'ARS', unit_price: amount }],
+      items: [{ title, quantity: 1, currency_id: 'ARS', unit_price: amount }],
       payer: body.payerEmail ? { email: body.payerEmail } : undefined,
       external_reference: externalReference,
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,

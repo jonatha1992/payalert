@@ -6,6 +6,9 @@ export type ClientApp = {
   allowed_origins: string[];
   api_key_hash: string; active: boolean;
   deposit_default: number;
+  allow_amount_override?: boolean;
+  min_amount?: number;
+  max_amount?: number;
 };
 
 export async function loadClientApp(slug: string): Promise<ClientApp | null> {
