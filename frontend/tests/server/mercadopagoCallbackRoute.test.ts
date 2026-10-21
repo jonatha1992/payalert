@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/server/session", async (orig) => ({
   ...(await orig<typeof import("@/lib/server/session")>()),
+  getServiceClient: vi.fn(() => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) })),
   getSessionProfile: vi.fn(async () => null),
 }));
 
