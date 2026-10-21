@@ -43,4 +43,5 @@ export const validationSchemas = {
   settings: schema({ name: { validator: text(1, 160) } }),
   login: schema({ email: { validator: mail }, password: { validator: requiredPass } }),
   newBusiness: schema({ name: { validator: text(1, 160) }, mpAccessToken: { validator: opt(4096), optional: true }, mpPublicKey: { validator: opt(1024), optional: true }, ualaClientId: { validator: opt(255), optional: true }, ualaClientSecret: { validator: opt(4096), optional: true } }),
+  adminUserRole: schema({ systemRole: { validator: enumOf(['admin', 'user'] as const) }, businessRole: { validator: enumOf(['owner', 'employee'] as const), optional: true }, business_id: { validator: optionalUuid, optional: true }, assigned_store_id: { validator: optionalUuid, optional: true }, confirmAdmin: { validator: (input) => input === true ? { ok: true, value: true } : { ok: false, fields: { value: 'Confirmación inválida.' } }, optional: true } }),
 } satisfies Record<string, Schema>;
