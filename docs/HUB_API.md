@@ -6,7 +6,7 @@ Todas las rutas requieren HTTP Bearer autenticando con la API key propia de la a
 
 ## Crear cobro
 
-`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
+`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; si `client_apps.connection_id` es `null` o la conexión está ausente/inactiva produce `409 { "error": "connection_unavailable" }` con las cabeceras CORS del Origin autorizado; no se crea un claim ni se llama a Mercado Pago. Las apps nuevas pueden registrar cobros solo después de que la dueña complete la autorización por invitación.
 
 El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
 
@@ -28,15 +28,16 @@ Los registros y el estado del cobro se mantienen en Supabase (`hub_charges`). El
 
 ## Alta de app
 
-1. Aplicar `docs/migrations/017_client_apps_hub.sql`, `018_hub_creating_status.sql`, `019_hub_hardening.sql` y `020_hub_generic_mode.sql` con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
-2. Autorizar OAuth MP con `offline_access read write` (o `MP_OAUTH_SCOPES`).
-3. Registrar cada app mediante un proceso administrativo que genere una API key aleatoria y almacene solo su SHA-256 en `client_apps.api_key_hash`. Guardar la clave una sola vez en el sistema de secretos de esa app; no incluirla en código cliente versionado.
+1. Aplicar manualmente las migraciones Hub requeridas, incluida `022_client_apps_connection_nullable.sql`, con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
+2. Registrar primero la app con `node scripts/register-client-app.js <config.json>`. El JSON admite `{ "slug": "huellitas", "allowed_origins": ["https://huellitas.example.test"], "deposit_default": 5000, "connect_return_url": "https://huellitas.example.test/connect/return", "business_id": "...", "connection_id": "..." }`; `business_id` y `connection_id` son opcionales. Sin `business_id` se crea/reutiliza un negocio oculto `app:<slug>`; sin `connection_id`, se almacena `null`. `connect_return_url` debe ser HTTPS y su origen estar incluido exactamente en `allowed_origins`.
+3. El comando muestra la API key una sola vez; guardarla como secreto y no incluirla en código versionado. Cuando la app se registra sin conexión, también muestra el enlace de invitación.
+4. Compartir ese enlace con la dueña: ella autoriza Mercado Pago desde su propia cuenta y la conexión se asocia a la app. Recién entonces el endpoint de creación de cobro funciona; antes responde `409 { "error": "connection_unavailable" }`.
 
 En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_encrypted` son nullable y PayAlert no requiere ni usa credenciales Firebase de la app cliente.
 
 ## Conexión por invitación
 
-La dueña puede delegar la autorización de Mercado Pago sin compartir su sesión de PayAlert. Crear el enlace para una app registrada con:
+La dueña puede delegar la autorización de Mercado Pago sin compartir su sesión de PayAlert. El orden es alta de app → enlace de invitación → la dueña autoriza Mercado Pago → creación de cobros habilitada. El alta sin conexión ya emite el enlace; para regenerarlo para una app activa, usar:
 
 ```bash
 node scripts/register-client-app.js invite --slug <slug> [--hours 24]
