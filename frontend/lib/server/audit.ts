@@ -5,7 +5,7 @@ export type AuditAction = 'USER_CREATED' | 'USER_DELETED' | 'USER_ROLE_CHANGED' 
 /** Audit payloads intentionally contain identifiers and action metadata only, never submitted user data or network addresses. */
 export async function recordAuditEvent(db: SupabaseClient, event: {
   businessId: string | null;
-  actorId: string;
+  actorId: string | null;
   action: AuditAction;
   entityType: string;
   entityId?: string | null;
