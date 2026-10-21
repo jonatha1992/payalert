@@ -41,9 +41,10 @@ export async function POST(request: NextRequest) {
     if (!validBody(body)) return jsonError('invalid_request', 400, headers);
     if (!app.allowed_origins.some((allowed) => body.returnUrl.startsWith(allowed))) return jsonError('return_url_denied', 400, headers);
     const amount = configuredDeposit(app.deposit_default);
+    if (!app.connection_id) return jsonError('connection_unavailable', 409, headers);
     const { data: connection, error: connectionError } = await getServiceClient().from('payment_connections')
       .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
-    if (!app.connection_id || connectionError || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });
+    if (connectionError || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });
     const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token?: string };
     const token = credentials.access_token?.trim();
     if (!token) return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });

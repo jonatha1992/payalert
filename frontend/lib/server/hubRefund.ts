@@ -8,6 +8,7 @@ type RefundResult = 'approved' | 'rejected' | 'uncertain';
 
 async function requestRefund(row: RefundCharge, db: RefundDb): Promise<RefundResult> {
   if (!row.payment_id) throw new Error('refund_payment_missing');
+  if (!row.client_apps.connection_id) throw new Error('connection_unavailable');
   const { data: connection, error } = await db.from('payment_connections').select('credentials_encrypted')
     .eq('id', row.client_apps.connection_id).eq('business_id', row.client_apps.business_id).single();
   if (error) throw error;
