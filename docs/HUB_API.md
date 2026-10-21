@@ -34,6 +34,21 @@ Los registros y el estado del cobro se mantienen en Supabase (`hub_charges`). El
 
 En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_encrypted` son nullable y PayAlert no requiere ni usa credenciales Firebase de la app cliente.
 
+## Conexión por invitación
+
+La dueña puede delegar la autorización de Mercado Pago sin compartir su sesión de PayAlert. Crear el enlace para una app registrada con:
+
+```bash
+node scripts/register-client-app.js invite --slug <slug> [--hours 24]
+```
+
+El comando muestra un enlace aleatorio una sola vez y guarda solo el hash del token. El enlace vence según `--hours` (por defecto 24 h), es de un solo uso y solo funciona mientras la app esté activa. Quien lo abra autoriza la cuenta en Mercado Pago; el callback guarda la conexión y la vincula exclusivamente a esa app. Si falla el intercambio con Mercado Pago, la invitación sigue vigente y se puede reabrir para iniciar una autorización nueva.
+
+Configurar `client_apps.connect_return_url` con una URL absoluta HTTPS de la app cliente. Su origen debe coincidir exactamente con una entrada de `client_apps.allowed_origins` (por ejemplo, `https://huellitas.example.test/connect/return`). Tras el callback, PayAlert agrega `mp=connected` o `mp=failed` a esa URL. Si la URL no está permitida, el callback vuelve al dashboard de PayAlert. El enlace se debe tratar como un secreto: compartirlo solo con la persona encargada y no registrarlo en logs.
+
+El flujo completo está en [docs/connect-invite-flow.md](connect-invite-flow.md).
+
+- OAuth MP requiere MP_OAUTH_ENABLED, MP_CLIENT_ID, MP_CLIENT_SECRET, MP_OAUTH_REDIRECT_URI y MP_OAUTH_STATE_SECRET (mínimo 32 caracteres).
 ## Variables
 
 - `MP_OAUTH_SCOPES`: default `offline_access read write`; permite los scopes requeridos por preferencias y reembolsos.
