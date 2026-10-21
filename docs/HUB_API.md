@@ -14,7 +14,10 @@ El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con
 
 `GET /api/v1/charges/{bookingId}` usa la misma API key y validación de `Origin`. El segmento `{bookingId}` identifica el booking dentro de la app autenticada. Responde `{ "status": "...", "amount": 5000, "expiresAt": "...", "paymentId": "..." }`; `paymentId` solo se incluye cuando hay uno registrado. Si el booking no tiene cobro para la app autenticada, devuelve `404` sin revelar si existe para otra app.
 
-## Reembolso
+## Estado de conexión
+
+`GET /api/v1/status` usa la misma API key y validación de `Origin`. Responde `{ "connected": true, "deposit_default": 5000 }` solo cuando la app tiene `connection_id` y la conexión asociada a su `business_id` tiene estado `CONNECTED`; en los demás casos `connected` es `false`. No expone identificadores de conexión, cuenta ni credenciales. `OPTIONS` implementa el preflight CORS con el mismo mecanismo de autenticación y allowlist.
+
 
 `POST /api/v1/charges/{bookingId}/refund` usa la misma API key y validación de `Origin`. El booking debe corresponder a un cobro aprobado de la app autenticada. La app puede enviar `{ "eventStartsAt": "2030-01-02T15:00:00.000Z" }`; si se incluye, PayAlert devuelve `409 refund_window_closed` cuando faltan menos de 24 horas. PayAlert no consulta Firestore ni aplica políticas de agenda propias. El reembolso usa CAS `approved -> refunding -> refunded`; el resultado ambiguo permanece `refunding` para conciliación y un rechazo definitivo del proveedor vuelve a `approved`. Responde `{ "status": "refunded" }` o `{ "status": "refunding" }`.
 
