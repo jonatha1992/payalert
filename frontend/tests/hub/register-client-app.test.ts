@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const { apiKeyHash, createInviteToken, inviteTokenHash, inviteUrl, parseHours, validateConfig } = require('../../../scripts/register-client-app.js');
+const { apiKeyHash, createInviteToken, getOrCreateBusiness, inviteTokenHash, inviteUrl, parseHours, validateConfig } = require('../../../scripts/register-client-app.js');
 const config = { slug: 'shop', business_id: 'business-1', connection_id: 'connection-1', allowed_origins: ['https://shop.test'], deposit_default: 2500 };
 
 describe('register-client-app generic mode', () => {
@@ -28,8 +28,17 @@ describe('register-client-app generic mode', () => {
     expect(() => parseHours('0')).toThrow('--hours');
     expect(() => validateConfig({ ...config, connect_return_url: 'https://attacker.test/return' })).toThrow('allowed_origins');
   });
-  it('requires a connection and rejects an invalid deposit', () => {
+  it('allows connection-free configs and rejects invalid optional identifiers and deposits', () => {
+    expect(() => validateConfig({ slug: 'shop', allowed_origins: ['https://shop.test'] })).not.toThrow();
     expect(() => validateConfig({ ...config, connection_id: '' })).toThrow('connection_id is required');
     expect(() => validateConfig({ ...config, deposit_default: 0 })).toThrow('deposit_default');
+    expect(() => validateConfig({ ...config, connect_return_url: 'http://shop.test/return' })).toThrow('https');
+  });
+  it('creates or reuses the hidden business keyed by app slug', async () => {
+    const calls: string[] = [];
+    const db = { from: (table: string) => ({ select: (columns: string) => { calls.push(`${table}.select(${columns})`); return { eq: (field: string, value: string) => { calls.push(`${field}=${value}`); return { maybeSingle: async () => ({ data: null, error: null }) }; } }; }, insert: (row: { name: string }) => { calls.push(`${table}.insert(${row.name})`); return { select: () => ({ single: async () => ({ data: { id: 'new-business' }, error: null }) }) }; } }) };
+    await expect(getOrCreateBusiness(db as never, 'shop')).resolves.toBe('new-business');
+    expect(calls).toContain('businesses.insert(app:shop)');
+    await expect(getOrCreateBusiness({} as never, 'shop', 'provided')).resolves.toBe('provided');
   });
 });
