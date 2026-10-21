@@ -13,9 +13,11 @@ export default function ProviderLogo({ provider, size = 40 }: ProviderLogoProps)
   const brand = BRANDS[provider];
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" role="img" aria-label={brand.label} className="shrink-0">
-      <rect width="40" height="40" rx="10" fill={brand.bg} />
       {provider === "mercadopago" ? (
-        <g transform="translate(5 5) scale(1.25)"><path d={MP_PATH} fill="#fff" /></g>
+        <>
+          <rect width="40" height="40" rx="10" fill="#fff" stroke="#e5e7eb" />
+          <g transform="translate(5 5) scale(1.25)"><path d={MP_PATH} fill="#009EE3" /></g>
+        </>
       ) : (
         <>
           <rect width="40" height="40" rx="10" fill="#fff" stroke="#e5e7eb" />
