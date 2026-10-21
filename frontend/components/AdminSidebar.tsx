@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Store, Settings, LogOut, Users, ShieldCheck, ChevronLeft, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Store, Settings, LogOut, Users, ShieldCheck, ChevronLeft, Menu, X, Plug } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { useSidebarState } from '@/hooks/useSidebarState';
 
 const menuItems = [
     { name: 'Panel Principal', href: '/admin', icon: LayoutDashboard },
     { name: 'Gestionar Negocios', href: '/admin/businesses', icon: Store },
+    { name: 'Apps vinculadas', href: '/admin/client-apps', icon: Plug },
     { name: 'Usuarios Globales', href: '/admin/users', icon: Users },
     { name: 'Configuración', href: '/admin/settings', icon: Settings },
 ];
