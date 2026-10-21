@@ -15,6 +15,7 @@ describe('schemas', () => {
     clientApp: { slug: 'client-app', business_id: '550e8400-e29b-41d4-a716-446655440000', connection_id: '550e8400-e29b-41d4-a716-446655440000', deposit_default: 5000, item_title: 'Reserva' },
     clientAppAmount: { deposit_default: 5000 },
     clientAppTitle: { item_title: 'Reserva' },
+    adminUserRole: { systemRole: 'user', businessRole: 'owner', business_id: '550e8400-e29b-41d4-a716-446655440000' },
   };
   it.each(Object.entries(validationSchemas))('%s accepts required fields', (name, schema) => {
     expect(schema(fixtures[name]).ok).toBe(true);
