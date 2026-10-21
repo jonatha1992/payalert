@@ -83,16 +83,7 @@ export default function NewBusinessPage() {
                                 </div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Access Token</label>
-                                        <input
-                                            type="password"
-                                            value={values.mpAccessToken}
-                                            onChange={(e) => change('mpAccessToken', e.target.value)}
-                                            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
-                                            placeholder="APP_USR-..."
-                                        />
-                                    </div>
+                                    <FormField label="Access Token" name="mpAccessToken" type="password" value={values.mpAccessToken} onChange={value => change('mpAccessToken', value)} onBlur={() => businessForm.blur('mpAccessToken')} error={errorFor('mpAccessToken')} maxLength={4096} placeholder="APP_USR-..." autoComplete="off" />
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Public Key</label>
                                         <input
@@ -133,16 +124,7 @@ export default function NewBusinessPage() {
                                             placeholder="Client ID"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Client Secret</label>
-                                        <input
-                                            type="password"
-                                            value={values.ualaClientSecret}
-                                            onChange={(e) => change('ualaClientSecret', e.target.value)}
-                                            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
-                                            placeholder="Client Secret"
-                                        />
-                                    </div>
+                                    <FormField label="Client Secret" name="ualaClientSecret" type="password" value={values.ualaClientSecret} onChange={value => change('ualaClientSecret', value)} onBlur={() => businessForm.blur('ualaClientSecret')} error={errorFor('ualaClientSecret')} maxLength={4096} placeholder="Client Secret" autoComplete="off" />
                                 </div>
                             </div>
                         </div>
