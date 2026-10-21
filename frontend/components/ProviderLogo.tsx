@@ -17,7 +17,10 @@ export default function ProviderLogo({ provider, size = 40 }: ProviderLogoProps)
       {provider === "mercadopago" ? (
         <g transform="translate(5 5) scale(1.25)"><path d={MP_PATH} fill="#fff" /></g>
       ) : (
-      <text x="20" y="26" textAnchor="middle" fontSize={brand.text.length > 1 ? 16 : 20} fontWeight="700" fill="#fff" fontFamily="system-ui, sans-serif">{brand.text}</text>
+        <>
+          <rect width="40" height="40" rx="10" fill="#fff" stroke="#e5e7eb" />
+          <image href="/providers/uala.png" x="6" y="6" width="28" height="28" />
+        </>
       )}
     </svg>
   );

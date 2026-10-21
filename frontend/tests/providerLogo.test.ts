@@ -9,3 +9,11 @@ describe('ProviderLogo', () => {
     expect(src).toMatch(/provider === "mercadopago"/);
   });
 });
+
+describe('ProviderLogo Ualá', () => {
+  it('usa el isotipo de Ualá y el archivo existe', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/ProviderLogo.tsx'), 'utf8');
+    expect(src).toContain('/providers/uala.png');
+    expect(readFileSync(join(__dirname, '..', 'public/providers/uala.png')).length).toBeGreaterThan(500);
+  });
+});
