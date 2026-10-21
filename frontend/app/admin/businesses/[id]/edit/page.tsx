@@ -5,10 +5,14 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { FormField } from '@/components/FormField';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { validationSchemas } from '@/lib/validation';
 
 export default function EditBusinessPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const [name, setName] = useState('');
+    const form = useFormValidation(validationSchemas.settings, { name: '' });
+    const { values, change, errorFor, submit, isValid, submitting } = form;
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -25,7 +29,7 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
 
                 if (error) throw error;
                 if (data) {
-                    setName(data.name);
+                    change('name', data.name);
                 }
             } catch (err: any) {
                 setError("Error al cargar el negocio: " + err.message);
@@ -38,24 +42,24 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
     }, [id]);
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSaving(true);
         setError(null);
+        await submit(e, async (normalized) => {
+            setSaving(true);
+            try {
+                const { error } = await supabase
+                    .from('businesses')
+                    .update({ name: normalized.name })
+                    .eq('id', id);
 
-        try {
-            const { error } = await supabase
-                .from('businesses')
-                .update({ name })
-                .eq('id', id);
+                if (error) throw error;
 
-            if (error) throw error;
-
-            router.push('/admin/businesses');
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setSaving(false);
-        }
+                router.push('/admin/businesses');
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setSaving(false);
+            }
+        });
     };
 
     if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin inline text-blue-600" /></div>;
@@ -67,14 +71,7 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del Negocio</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                            required
-                        />
+                        <FormField label="Nombre del Negocio" name="business-name" value={values.name} onChange={value => change('name', value)} onBlur={() => form.blur('name')} error={errorFor('name')} maxLength={160} required />
                     </div>
 
                     <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -96,7 +93,7 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
                         </Link>
                         <button
                             type="submit"
-                            disabled={saving}
+                            disabled={!isValid || saving || submitting}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {saving && <Loader2 className="animate-spin" size={18} />}
