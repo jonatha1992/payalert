@@ -16,8 +16,8 @@ export default function ProviderLogo({ provider, size = 40 }: ProviderLogoProps)
       {provider === "mercadopago" ? (
         <>
           <rect width="40" height="40" rx="10" fill="#FFE600" />
-          <ellipse cx="20" cy="20" rx="14.5" ry="10.5" fill="#009EE3" />
-          <g transform="translate(5 5) scale(1.25)"><path d={MP_PATH} fill="#fff" /></g>
+          <ellipse cx="20" cy="20" rx="16" ry="11.5" fill="#009EE3" stroke="#fff" strokeWidth="1.2" />
+          <g transform="translate(20 20) scale(1.3) translate(-12 -12)"><path d={MP_PATH} fill="#fff" /></g>
         </>
       ) : (
         <>
