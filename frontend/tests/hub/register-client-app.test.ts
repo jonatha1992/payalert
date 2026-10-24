@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
-const { apiKeyHash, createInviteToken, getOrCreateBusiness, inviteTokenHash, inviteUrl, parseHours, validateConfig } = require('../../../scripts/register-client-app.js');
+const require = createRequire(import.meta.url);
+const { apiKeyHash, createInviteToken, getOrCreateBusiness, inviteUrl, parseHours, validateConfig } = require('../../../scripts/register-client-app.js');
+import { createConnectInvite, inviteTokenHash } from '../../lib/server/connectInvites';
 const config = { slug: 'shop', business_id: 'business-1', connection_id: 'connection-1', allowed_origins: ['https://shop.test'], deposit_default: 2500 };
 
 describe('register-client-app generic mode', () => {
@@ -17,10 +20,13 @@ describe('register-client-app generic mode', () => {
     expect(source).not.toContain('firebase_service_account_file');
     expect(source).not.toContain('firebase_sa_encrypted');
   });
-  it('creates a random invite token, hashes the token and builds its complete URL', () => {
-    const token = createInviteToken((bytes: number) => Buffer.alloc(bytes, 7));
-    expect(token).toBe(`ci_${Buffer.alloc(32, 7).toString('base64url')}`);
+  it('creates a random invite token, hashes the token and builds its complete URL', async () => {
+    const token = 'ci_sample';
     expect(inviteTokenHash(token)).toBe(createHash('sha256').update(token).digest('hex'));
+    const inserted: unknown[] = [];
+    await createConnectInvite({ from: () => ({ insert: async (row) => { inserted.push(row); return { error: null }; } }) }, { id: 'app-1' }, { hours: 1, baseUrl: 'https://payalert.test/', now: new Date('2030-01-01T00:00:00Z') });
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({ client_app_id: 'app-1', expires_at: '2030-01-01T01:00:00.000Z' });
     expect(inviteUrl(token, 'https://payalert.test/')).toBe(`https://payalert.test/connect/${token}`);
   });
   it('validates invite lifetime and safe client return origins', () => {

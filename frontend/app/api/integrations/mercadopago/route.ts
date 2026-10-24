@@ -260,15 +260,17 @@ async function handleOwnerCallback(request: NextRequest, code: string, state: st
 }
 
 async function handleInviteCallback(request: NextRequest, code: string, state: string, row: { state_hash: string; business_id: string; invite_id: string; user_id: null }, db: ReturnType<typeof getServiceClient>) {
+  const dashboardOrigin = request.nextUrl.origin;
+  const now = new Date().toISOString();
   let app: (ClientApp & { connect_return_url: string | null }) | null = null;
   try {
-    const { data: invite, error } = await db.from('connect_invites').select('id,client_app_id,expires_at,used_at,client_apps!inner(id,business_id,active,connect_return_url,allowed_origins,api_key_hash,connection_id,deposit_default)').eq('id', row.invite_id).maybeSingle();
+    const { data: invite, error } = await db.from('connect_invites').select('id,client_app_id,expires_at,used_at,client_apps!inner(id,slug,business_id,active,connect_return_url,allowed_origins,api_key_hash,connection_id,deposit_default)').eq('id', row.invite_id).maybeSingle();
     if (error) throw error;
     const raw = invite as { id: string; client_app_id: string; expires_at: string; used_at: string | null; client_apps: unknown } | null;
     const joined = Array.isArray(raw?.client_apps) ? raw.client_apps[0] : raw?.client_apps;
     app = joined && typeof joined === 'object' ? joined as ClientApp & { connect_return_url: string | null } : null;
     const now = new Date().toISOString();
-    if (!raw || raw.used_at || raw.expires_at <= now || raw.client_app_id !== app?.id || app.business_id !== row.business_id || !app.active || !app.connect_return_url || !originAllowed(app, new URL(app.connect_return_url).origin)) throw new Error('Connect invitation is invalid, expired, used, or return origin not allowed');
+    if (!raw || raw.used_at || raw.expires_at <= now || raw.client_app_id !== app?.id || app.business_id !== row.business_id || !app.active || !app.connect_return_url || !(originAllowed(app, new URL(app.connect_return_url).origin) || (new URL(app.connect_return_url).origin === dashboardOrigin && new URL(app.connect_return_url).pathname === '/dashboard/apps'))) throw new Error('Connect invitation is invalid, expired, used, or return origin not allowed');
     const config = oauthConfig();
     if (!config || !process.env.MP_OAUTH_STATE_SECRET) throw new Error('OAuth not configured');
     const payload = verifyOAuthState(state, { tenantId: row.business_id, userId: `invite:${row.invite_id}` });
@@ -284,12 +286,12 @@ async function handleInviteCallback(request: NextRequest, code: string, state: s
     if (useError) throw useError;
     if (!used) throw new Error('Invitation already consumed');
     await recordAuditEvent(db, { businessId: row.business_id, actorId: null, action: 'CONFIGURATION_UPDATED', entityType: 'payment_connection', entityId: connectionId, newData: { provider: 'mercado_pago', auth: 'oauth', client_app_id: app.id, invite_id: row.invite_id, nonce: payload.nonce } });
-    return NextResponse.redirect(connectReturnUrl(app, 'connected'));
+    return NextResponse.redirect(connectReturnUrl(app, 'connected', dashboardOrigin));
   } catch (error) {
     console.error('[MP OAuth invite callback] failed:', safeError(error));
     if (app?.connect_return_url) {
       try {
-        if (originAllowed(app, new URL(app.connect_return_url).origin)) return NextResponse.redirect(connectReturnUrl(app, 'failed'));
+        if (originAllowed(app, new URL(app.connect_return_url).origin) || (new URL(app.connect_return_url).origin === dashboardOrigin && new URL(app.connect_return_url).pathname === '/dashboard/apps')) return NextResponse.redirect(connectReturnUrl(app, 'failed', dashboardOrigin));
       } catch {
         // Invalid configured return URLs must fall back to PayAlert, never escape the allowlist.
       }
@@ -297,10 +299,12 @@ async function handleInviteCallback(request: NextRequest, code: string, state: s
     return NextResponse.redirect(new URL('/dashboard/integrations?oauth=failed', request.url));
   }
 }
-function connectReturnUrl(app: ClientApp & { connect_return_url: string | null }, status: 'connected' | 'failed'): URL {
-  if (!app.connect_return_url || !originAllowed(app, new URL(app.connect_return_url).origin)) throw new Error('Connect return URL is not allowed');
-  const url = new URL(app.connect_return_url);
+function connectReturnUrl(app: ClientApp & { connect_return_url: string | null }, status: 'connected' | 'failed', dashboardOrigin: string): URL {
+  const url = app.connect_return_url ? new URL(app.connect_return_url) : null;
+  if (!url || (!originAllowed(app, url.origin) && !(url.origin === dashboardOrigin && url.pathname === '/dashboard/apps'))) throw new Error('Connect return URL is not allowed');
+  if (url.pathname === '/dashboard/apps') url.searchParams.set('connected', app.slug);
   url.searchParams.set('mp', status);
+  if (app.slug) url.searchParams.set('slug', app.slug);
   return url;
 }
 async function resolveAccountId(tokens: Awaited<ReturnType<typeof exchangeAuthorizationCode>>): Promise<string> {

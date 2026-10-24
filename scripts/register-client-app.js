@@ -55,15 +55,17 @@ function serviceClient() {
   const { createClient } = frontendRequire('@supabase/supabase-js');
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 }
-async function createInvite(db, slug, hours, options = {}) {
-  const token = options.token ?? createInviteToken(options.randomBytes);
-  const now = options.now ?? new Date();
-  const { data: app, error: appError } = await db.from('client_apps').select('id').eq('slug', slug).eq('active', true).maybeSingle();
-  if (appError) throw new Error('Could not load active client app (' + (appError.code || 'database_error') + ')');
-  if (!app) throw new Error(`Active client app not found: ${slug}`);
-  const { error } = await db.from('connect_invites').insert({ client_app_id: app.id, token_hash: inviteTokenHash(token), expires_at: new Date(now.getTime() + hours * 3_600_000).toISOString() });
-  if (error) throw new Error('Invite creation failed (' + (error.code || 'database_error') + ')');
-  return inviteUrl(token, options.baseUrl);
+function createInvite(db, slug, hours, options = {}) {
+  const inviteModule = require('../frontend/lib/server/connectInvites');
+  return db.from('client_apps').select('id').eq('slug', slug).eq('active', true).maybeSingle()
+    .then(({ data, error }) => {
+      if (error) throw new Error('Could not load active client app (' + (error.code || 'database_error') + ')');
+      if (!data) throw new Error(`Active client app not found: ${slug}`);
+      return inviteModule.createConnectInvite({ from: (table) => {
+        if (table !== 'connect_invites') throw new Error('Unexpected invite table');
+        return { insert: (row) => db.from(table).insert(row) };
+      } }, data, { hours, baseUrl: options.baseUrl ?? process.env.PAYALERT_URL, now: options.now });
+    });
 }
 async function getOrCreateBusiness(db, slug, businessId) {
   if (businessId) return businessId;

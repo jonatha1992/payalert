@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 type App = {
   slug: string;
@@ -44,6 +45,9 @@ function useAdminData<T>(url: string, key: string): AdminData<T | null> {
 export default function AppsPage() {
   const apps = useAdminData<App[]>('/api/admin/apps', 'apps');
   const charges = useAdminData<Charge[]>('/api/admin/charges', 'charges');
+  const params = useSearchParams(); const [notice, setNotice] = useState(''); const [error, setError] = useState(''); const [connecting, setConnecting] = useState<string | null>(null);
+  useEffect(() => { const slug = params.get('connected'); const status = params.get('mp'); if (slug && status) { setNotice(status === 'connected' ? 'Mercado Pago conectado a ' + slug : 'No se pudo conectar Mercado Pago a ' + slug + '. Probá de nuevo.'); window.history.replaceState({}, '', '/dashboard/apps'); } }, [params]);
+  async function connect(app: App) { if (app.connected && !window.confirm('Esto reemplaza la cuenta actual. ¿Querés continuar?')) return; setConnecting(app.slug); setError(''); try { const response = await fetch('/api/admin/apps/' + encodeURIComponent(app.slug) + '/connect', { method: 'POST' }); const body = await response.json() as { url?: string; error?: string }; if (!response.ok || !body.url) throw new Error(body.error || 'No pudimos iniciar la conexión.'); window.location.assign(body.url); } catch (cause) { setError(cause instanceof Error ? cause.message : 'No pudimos iniciar la conexión.'); setConnecting(null); } }
   return (
     <div className="space-y-8">
       <header>
@@ -51,7 +55,7 @@ export default function AppsPage() {
         <p className="mt-1 text-gray-500 dark:text-gray-400">Estado de las apps, sus cuentas de Mercado Pago y los cobros del hub.</p>
       </header>
       <section aria-labelledby="apps-heading" className="space-y-4">
-        <h2 id="apps-heading" className="text-xl font-semibold text-gray-900 dark:text-white">Apps conectadas</h2>
+        <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100"><strong>Para cobrar, conectá la cuenta de Mercado Pago de cada página</strong><p className="mt-1">Vas a pasar a Mercado Pago, iniciá sesión con la cuenta que va a recibir las señas.</p></div>{notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-emerald-800">{notice}</p>}{error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
         {apps.loading ? <p role="status">Cargando apps…</p> : apps.error ? <p role="alert">{apps.error}</p> : !apps.data?.length ? <Empty text="Todavía no hay apps." /> : (
           <div className="grid gap-4 md:grid-cols-2">
             {apps.data.map((app) => (
@@ -64,6 +68,7 @@ export default function AppsPage() {
                 <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">Seña por defecto: {money.format(app.deposit_default)}</p>
                 <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">Cuenta de Mercado Pago: {app.account?.provider_account_id ?? 'Sin cuenta asociada'}</p>
                 {!app.active && <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">App inactiva</p>}
+                <button type="button" disabled={!app.active || connecting !== null} onClick={() => void connect(app)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800 disabled:opacity-50"><span aria-hidden="true">↗</span>{connecting === app.slug ? 'Abriendo Mercado Pago…' : app.connected ? 'Reconectar Mercado Pago' : 'Conectar Mercado Pago'}</button>
               </article>
             ))}
           </div>
