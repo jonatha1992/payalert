@@ -14,6 +14,13 @@ GET agrega métricas desde `hub_charges` y devuelve proveedor/estado de conexió
 
 ## Crear cobro
 
+## Conectar Mercado Pago sin cuenta PayAlert
+
+`POST /api/v1/connect-link` solicita un enlace de un solo uso y requiere Bearer con la API key de la app y un `Origin` incluido exactamente en `client_apps.allowed_origins`. Devuelve `{ "url": "https://payalert.../connect/<token>", "expiresAt": "..." }`; dura 24 horas y un enlace nuevo invalida los anteriores no usados de esa app. La app debe llamar desde su servidor/panel y mostrar el enlace a su responsable.
+
+La página pública `/connect/<token>` permite validar el enlace sin sesión PayAlert e iniciar OAuth con Mercado Pago usando el redirect URI ya configurado. El token se almacena únicamente como SHA-256; no lo incluyas en logs. Tras autorizar, el callback vincula la conexión Mercado Pago a la app. El administrador PayAlert también puede generar enlaces de siete días desde Apps vinculadas; la URL completa se muestra una sola vez.
+
+
 `POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
 
 El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.

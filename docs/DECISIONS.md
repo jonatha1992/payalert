@@ -88,6 +88,20 @@ Formato por entrada: `## YYYY-MM-DD — título` con Contexto, Decisión, Altern
 
 ## 2026-10-19 — PAY-38: aislar sincronización inmediata y push idempotente
 
-**Decisión:** extraer el ciclo de sync a `frontend/lib/payments/hintSync.ts` con dependencias inyectadas; enviar push confirmado solo al afectar una fila con cambio condicional PENDING→CONFIRMED.
+**Decisión:** Extraer el ciclo de sync a `frontend/lib/payments/hintSync.ts` con dependencias inyectadas; enviar push confirmado solo al afectar una fila con cambio condicional PENDING→CONFIRMED.
 
-**Impacto:** la sincronización reutiliza ingestión existente, que reconcilia hint único al guardar pago real; dashboard excluye transacciones pending.
+**Impacto:** La sincronización reutiliza ingestión existente, que reconcilia hint único al guardar pago real; dashboard excluye las transacciones pendientes.
+
+## 2026-10-25 — PAY-46: conexión OAuth de apps cliente sin cuenta PayAlert
+
+**Contexto:** Las apps del Hub pueden necesitar una conexión Mercado Pago propia aunque su titular no tenga usuario en PayAlert.
+
+**Decisión:** Habilitar enlaces aleatorios de un solo uso, persistiendo únicamente su SHA-256 y asociándolos a la app. El endpoint de Hub emite enlaces de 24 horas y el administrador enlaces de siete días. El callback del OAuth distingue el enlace mediante state persistido y procesa esta rama sin relajar la autorización OAuth de dueños.
+
+**Alternativas descartadas:** Crear una cuenta PayAlert para cada titular de app; reutilizar o relajar el callback autenticado de dueños; guardar el token de enlace en claro.
+
+**Motivo:** Permitir consentimiento directo en Mercado Pago sin credenciales PayAlert y evitar que el enlace pueda reutilizarse o exponerse mediante la base.
+
+**Impacto:** Se necesita aplicar la migración `022_client_app_connect_links.sql` y permitir `user_id` nulo en `mp_oauth_states`. No probar contra Mercado Pago real ni aplicar migraciones en este cambio.
+
+**Ticket/commit:** PAY-46.

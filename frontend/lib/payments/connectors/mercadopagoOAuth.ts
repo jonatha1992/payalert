@@ -16,6 +16,8 @@ export interface OAuthStatePayload {
   userId: string;
   nonce: string;
   issuedAt: number;
+  clientAppId?: string;
+  connectLinkId?: string;
 }
 export interface MercadoPagoTokens {
   access_token: string;
