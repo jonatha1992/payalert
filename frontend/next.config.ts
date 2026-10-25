@@ -6,8 +6,7 @@ const withPWA = require("next-pwa")({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  // reactCompiler: true, // Commenting out if not needed or causing issues, enabled by default in recent versions or via flag
+  ...(process.env.DOCKER_BUILD === "1" ? { output: "standalone" as const } : {}),
 };
 
 export default withPWA(nextConfig);
