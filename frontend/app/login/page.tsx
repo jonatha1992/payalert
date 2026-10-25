@@ -133,6 +133,10 @@ function LoginForm() {
                     </p>
                 </div>
             </div>
+            <nav aria-label="Páginas legales" className="mt-5 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-medium">
+                <a href="/privacidad" className="text-gray-500 underline underline-offset-4 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white">Privacidad</a>
+                <a href="/terminos" className="text-gray-500 underline underline-offset-4 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white">Términos del servicio</a>
+            </nav>
         </div>
     );
 }
