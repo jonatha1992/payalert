@@ -27,7 +27,7 @@ export interface ResolvedScope {
 export class ScopeError extends Error {
   constructor(
     message: string,
-    readonly status: 401 | 403 | 400,
+    readonly status: number,
   ) {
     super(message);
     this.name = 'ScopeError';

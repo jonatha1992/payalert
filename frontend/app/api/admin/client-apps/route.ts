@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       const connection = app.payment_connections as unknown as { provider: string; status: string } | null;
       return {
         id: app.id, slug: app.slug, business_id: app.business_id, business_name: business?.name ?? null,
-        connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null,
+        connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null, connection_connected: Boolean(app.connection_id && connection?.status === "active"),
         allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title,
         active: app.active, metrics: { total: rows.length, approved: approved.length, pending: pending.length,
           approved_amount: approved.reduce((sum, charge) => sum + charge.amount, 0), latest_charge_at: latest },
