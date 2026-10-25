@@ -99,7 +99,7 @@ export default function Home() {
             rel="noopener noreferrer"
             className="text-blue-400 hover:text-blue-300 transition-colors"
           >
-            TecnoFusion IT
+            tecnofusion.dev
           </a>
         </p>
       </div>
