@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
+import Script from 'next/script';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import { validationSchemas } from '@/lib/validation';
 import { FormField } from '@/components/FormField';
+import { generateNonce, googleLoginError, sha256Hex, shouldUseGoogleIdentity, type GoogleIdentityWindow } from '@/lib/googleIdentity';
 
 const loginErrors: Record<string, string> = {
     signup_not_allowed: 'Tu correo no está habilitado para crear una cuenta. Consultá con tu administrador.',
     oauth_callback_failed: 'No pudimos completar el ingreso con Google. Probá de nuevo.',
 };
+const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const useGoogleIdentity = shouldUseGoogleIdentity(googleClientId);
 
 export default function LoginPage() {
     return <Suspense fallback={<div className="min-h-screen bg-gray-100 dark:bg-gray-900" />}><LoginForm /></Suspense>;
@@ -23,7 +27,53 @@ function LoginForm() {
     const { values, change, errorFor, submit, isValid, submitting } = loginForm;
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [gisReady, setGisReady] = useState(false);
+    const [gisFailed, setGisFailed] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const googleButtonRef = useRef<HTMLDivElement>(null);
+
+    const handleGoogleFailure = useCallback(() => {
+        setError(googleLoginError());
+        setGoogleLoading(false);
+    }, []);
+
+    const completeGoogleLogin = useCallback(async (credential: string, nonce: string) => {
+        try {
+            const { error: authError } = await supabase.auth.signInWithIdToken({ provider: 'google', token: credential, nonce });
+            if (authError) { handleGoogleFailure(); return; }
+            window.location.href = '/dashboard';
+        } catch {
+            handleGoogleFailure();
+        }
+    }, [handleGoogleFailure]);
+
+    useEffect(() => {
+        const gisWindow = window as GoogleIdentityWindow;
+        if (!useGoogleIdentity || !gisReady || !googleButtonRef.current || !gisWindow.google?.accounts.id) return;
+        let active = true;
+        const initialize = async () => {
+            const nonce = generateNonce();
+            const hashedNonce = await sha256Hex(nonce);
+            if (!active || !googleClientId || !googleButtonRef.current || !gisWindow.google?.accounts.id) return;
+            gisWindow.google.accounts.id.initialize({
+                client_id: googleClientId,
+                nonce: hashedNonce,
+                use_fedcm_for_prompt: true,
+                callback: (response) => {
+                    if (!response.credential) { handleGoogleFailure(); return; }
+                    setGoogleLoading(true);
+                    setError(null);
+                    void completeGoogleLogin(response.credential, nonce);
+                },
+            });
+            gisWindow.google.accounts.id.renderButton(googleButtonRef.current, {
+                type: 'standard', theme: 'outline', size: 'large', text: 'continue_with',
+                shape: 'rectangular', width: Math.min(googleButtonRef.current.clientWidth, 400), locale: 'es',
+            });
+        };
+        void initialize().catch(handleGoogleFailure);
+        return () => { active = false; };
+    }, [completeGoogleLogin, gisReady, handleGoogleFailure]);
 
     const handleLogin = async (e: React.FormEvent) => {
         await submit(e, async (normalized) => {
@@ -58,32 +108,37 @@ function LoginForm() {
         });
     };
 
-    const handleGoogleLogin = async () => {
+    const handleOAuthFallback = async () => {
         setGoogleLoading(true);
         setError(null);
-        const { error: authError } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (authError) {
-            setError('No pudimos ingresar con Google. Probá de nuevo.');
-            setGoogleLoading(false);
+        try {
+            const { error: authError } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: `${window.location.origin}/auth/callback` },
+            });
+            if (authError) handleGoogleFailure();
+        } catch {
+            handleGoogleFailure();
         }
     };
+    const showOAuthFallback = !useGoogleIdentity || gisFailed;
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                <div className="p-8">
+        <>
+            {useGoogleIdentity && <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={() => setGisReady(true)} onError={() => setGisFailed(true)} />}
+            <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div className="p-8">
                     <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-2">Bienvenido</h2>
                     <p className="text-center text-gray-500 dark:text-gray-400 mb-8">Inicia sesión para gestionar tu negocio</p>
                     {loginErrors[searchParams.get('error') ?? ''] && (
                         <div role="alert" className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{loginErrors[searchParams.get('error') ?? '']}</div>
                     )}
 
-                    <button
+                    {useGoogleIdentity && !gisFailed && <div ref={googleButtonRef} aria-busy={googleLoading} className="w-full min-h-11 flex justify-center overflow-hidden" />}
+                    {showOAuthFallback && <button
                         type="button"
-                        onClick={handleGoogleLogin}
+                        onClick={handleOAuthFallback}
                         disabled={googleLoading || loading}
                         aria-label="Continuar con Google"
                         className="w-full min-h-11 flex justify-center items-center gap-3 py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -97,7 +152,8 @@ function LoginForm() {
                             </svg>
                         )}
                         {googleLoading ? 'Conectando con Google…' : 'Continuar con Google'}
-                    </button>
+                    </button>}
+                    {useGoogleIdentity && !gisReady && !gisFailed && <div aria-live="polite" className="sr-only">Cargando Google…</div>}
                     <div aria-hidden="true" className="my-6 flex items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
                         <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                         <span>o</span>
@@ -131,8 +187,9 @@ function LoginForm() {
                     <p className="text-xs text-center text-gray-500 dark:text-gray-400">
                         ¿No tienes una cuenta? Contacta a tu administrador.
                     </p>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }
