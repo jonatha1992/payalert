@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader2, Mail, Lock } from 'lucide-react';
@@ -24,6 +24,13 @@ function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Al volver atrás desde Google el navegador restaura la página con el spinner colgado.
+        const reset = (e: PageTransitionEvent) => { if (e.persisted) setGoogleLoading(false); };
+        window.addEventListener('pageshow', reset);
+        return () => window.removeEventListener('pageshow', reset);
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         await submit(e, async (normalized) => {
@@ -72,11 +79,15 @@ function LoginForm() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center p-4">
             <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-200 dark:border-gray-700">
                 <div className="p-8">
-                    <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-2">Bienvenido</h2>
-                    <p className="text-center text-gray-500 dark:text-gray-400 mb-8">Inicia sesión para gestionar tu negocio</p>
+                    <div className="flex flex-col items-center mb-8">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/icon-512x512.png" alt="" width={56} height={56} className="h-14 w-14 rounded-2xl shadow-md mb-4" />
+                        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white">Ingresá a PayAlert</h1>
+                        <p className="mt-1 text-sm text-center text-gray-500 dark:text-gray-400">Controlá los cobros de tu negocio en tiempo real</p>
+                    </div>
                     {loginErrors[searchParams.get('error') ?? ''] && (
                         <div role="alert" className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{loginErrors[searchParams.get('error') ?? '']}</div>
                     )}
@@ -129,7 +140,7 @@ function LoginForm() {
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700/50 px-8 py-4 border-t border-gray-100 dark:border-gray-700">
                     <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-                        ¿No tienes una cuenta? Contacta a tu administrador.
+                        ¿Necesitás acceso? Escribinos a tecnofusion.it@gmail.com
                     </p>
                 </div>
             </div>
