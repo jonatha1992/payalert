@@ -2,7 +2,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
-    if (request.nextUrl.pathname === '/auth/callback' || request.nextUrl.pathname.startsWith('/auth/callback/')) {
+    const pathname = request.nextUrl.pathname
+    if (pathname === '/privacidad' || pathname === '/terminos' || pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) {
         return NextResponse.next()
     }
 

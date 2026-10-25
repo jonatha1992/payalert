@@ -82,6 +82,11 @@ export default function Home() {
         </div>
       </div>
 
+      <nav aria-label="Páginas legales" className="z-10 mt-[-3rem] mb-24 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm font-medium">
+        <Link href="/privacidad" className="text-slate-400 underline decoration-slate-600 underline-offset-4 hover:text-white">Privacidad</Link>
+        <Link href="/terminos" className="text-slate-400 underline decoration-slate-600 underline-offset-4 hover:text-white">Términos del servicio</Link>
+      </nav>
+
       <div className="absolute bottom-8 text-center">
         <p className="text-slate-600 text-[10px] sm:text-xs font-medium uppercase tracking-[0.2em]">
           © 2026 PayAlert Systems
