@@ -17,6 +17,7 @@ describe('schemas', () => {
     clientAppAmount: { deposit_default: 5000 },
     clientAppTitle: { item_title: 'Reserva' },
     clientAppFee: { fee_type: 'fixed', fee_value: 1 },
+    clientAppFirebase: { firebase_project_id: 'huellitas-prod', owner_emails: ['owner@example.com'] },
   };
   it.each(Object.entries(validationSchemas))('%s accepts required fields', (name, schema) => {
     expect(schema(fixtures[name]).ok).toBe(true);

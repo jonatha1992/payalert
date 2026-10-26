@@ -29,7 +29,8 @@
     "tailwind-merge": "^3.4.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
-    "firebase-admin": "^13.0.2"
+    "firebase-admin": "^13.0.2",
+    "jose": "^4.15.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

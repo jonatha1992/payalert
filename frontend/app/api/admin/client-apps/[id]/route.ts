@@ -70,9 +70,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       changes.fee_type = result.value.fee_type;
       changes.fee_value = result.value.fee_value;
     }
+    if (body.firebase_project_id !== undefined || body.owner_emails !== undefined) {
+      const result = validationSchemas.clientAppFirebase({ firebase_project_id: body.firebase_project_id, owner_emails: body.owner_emails });
+      if (!result.ok) throw new ScopeError(Object.values(result.fields)[0] ?? 'La configuración Firebase no es válida.', 400);
+      if (body.firebase_project_id !== undefined) changes.firebase_project_id = result.value.firebase_project_id;
+      if (body.owner_emails !== undefined) changes.owner_emails = result.value.owner_emails;
+    }
     if (!Object.keys(changes).length) throw new ScopeError('No hay cambios válidos para guardar.', 400);
     changes.updated_at = new Date().toISOString();
-    const { data: app, error } = await db.from('client_apps').update(changes).eq('id', id).select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active').single();
+    const { data: app, error } = await db.from('client_apps').update(changes).eq('id', id).select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active, firebase_project_id, owner_emails').single();
     if (error) throw error;
     await recordAuditEvent(db, { businessId: existing.business_id, actorId: profile.userId, action: 'CONFIGURATION_UPDATED', entityType: 'client_app', entityId: id, newData: { ...changes, allowed_origins: changes.allowed_origins ? '[actualizados]' : undefined } });
     return NextResponse.json({ app });

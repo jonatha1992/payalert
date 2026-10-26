@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   try {
     authorize(await getSessionProfile(request));
     const db = getServiceClient();
-    const { data, error } = await db.from('client_apps').select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active, created_at, businesses(name), payment_connections(provider, status)').order('created_at', { ascending: false });
+    const { data, error } = await db.from('client_apps').select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active, created_at, businesses(name), payment_connections(provider, status), firebase_project_id, owner_emails').order('created_at', { ascending: false });
     if (error) throw error;
     const ids = (data ?? []).map((app) => app.id);
     const { data: charges, error: chargesError } = ids.length
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       return {
         id: app.id, slug: app.slug, name: business?.name?.startsWith('app:') ? app.slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') : business?.name ?? app.slug, business_id: app.business_id, business_name: business?.name ?? null,
         connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null, connection_connected: Boolean(app.connection_id && connection?.status === "active"),
-        allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title,
+        allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title, firebase_project_id: app.firebase_project_id ?? null, owner_emails: app.owner_emails ?? [],
         active: app.active, metrics: { total: rows.length, approved: approved.length, pending: pending.length,
           approved_amount: approved.reduce((sum, charge) => sum + charge.amount, 0), latest_charge_at: latest },
       };
