@@ -6,6 +6,8 @@ import { FormField } from '@/components/FormField';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import type { Schema } from '@/lib/validation/schemas';
 import { validationSchemas } from '@/lib/validation/schemas';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 import { PASSWORD_RESET_SENT_MESSAGE } from '@/lib/passwordReset';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -28,14 +30,17 @@ export default function ForgotPasswordPage() {
       });
       if (!requestError) {
         setMessage(PASSWORD_RESET_SENT_MESSAGE);
+        toast.success('Te enviamos el enlace para cambiar la contraseña.');
         return;
       }
       const messageText = requestError.message.toLowerCase();
       if (requestError.status === 429 || messageText.includes('rate') || messageText.includes('limit') || messageText.includes('too many')) {
         setError('Se alcanzó el límite de envíos. Esperá unos minutos antes de intentar de nuevo.');
+        toast.error('Se alcanzó el límite de envíos. Esperá unos minutos antes de intentar de nuevo.');
         return;
       }
       setError('No pudimos enviar el enlace ahora. Revisá tu conexión e intentá de nuevo.');
+      toast.error(friendlyErrorMessage(requestError, 'No pudimos enviar el enlace ahora. Revisá tu conexión e intentá de nuevo.'));
     });
   }
 

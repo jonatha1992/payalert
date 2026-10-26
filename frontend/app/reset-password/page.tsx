@@ -8,6 +8,8 @@ import { useFormValidation } from '@/hooks/useFormValidation';
 import type { Schema } from '@/lib/validation/schemas';
 import { supabase } from '@/lib/supabaseClient';
 import { validatePasswordReset } from '@/lib/passwordReset';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 
 const resetSchema: Schema = (input) => {
   const values = input as Record<string, unknown>;
@@ -62,10 +64,13 @@ export default function ResetPasswordPage() {
       setError('');
       const { error: updateError } = await supabase.auth.updateUser({ password: String(password) });
       if (updateError) {
-        setError(updateError.message.toLowerCase().includes('password') ? 'La contraseña no cumple los requisitos. Probá con otra de al menos 8 caracteres.' : 'No pudimos actualizar la contraseña. Volvé a intentarlo.');
+        const message = friendlyErrorMessage(updateError, updateError.message.toLowerCase().includes('password') ? 'La contraseña no cumple los requisitos. Probá con otra de al menos 8 caracteres.' : 'No pudimos actualizar la contraseña. Volvé a intentarlo.');
+        setError(message);
+        toast.error(message);
         setSaving(false);
         return;
       }
+      toast.success('Contraseña actualizada');
       await supabase.auth.signOut();
       router.replace('/login?password_reset=success');
     });
