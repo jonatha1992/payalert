@@ -26,6 +26,7 @@ import { validationSchemas } from '@/lib/validation';
 
 
 import { FormField } from '@/components/FormField';
+import AppVersion from '@/components/AppVersion';
 
 
 import { generateNonce, googleLoginError, sha256Hex, shouldUseGoogleIdentity, type GoogleIdentityWindow } from '@/lib/googleIdentity';
@@ -630,6 +631,7 @@ function LoginForm() {
 
 
             </nav>
+            <AppVersion />
 
 
             </div>

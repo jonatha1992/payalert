@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Store, Settings, LogOut, Users, ShieldCheck, ChevronLeft, Menu, X, Plug } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import AppVersion from '@/components/AppVersion';
 import { useSidebarState } from '@/hooks/useSidebarState';
 
 const menuItems = [
@@ -67,6 +68,7 @@ export default function AdminSidebar() {
                     <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
                     <span className="sidebar-label font-bold text-sm">Cerrar Sesión</span>
                 </button>
+                <div className="mt-3 px-2"><AppVersion /></div>
             </div>
             </aside>
         </>
