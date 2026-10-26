@@ -46,6 +46,7 @@ export const validationSchemas = {
   clientApp: schema({ name: { validator: text(1, 160) } }),
   clientAppAmount: schema({ deposit_default: { validator: (input) => typeof input === 'number' && Number.isInteger(input) && input >= 1 && input <= 1000000 ? { ok: true, value: input } : { ok: false, fields: { value: 'El monto debe ser un entero entre 1 y 1.000.000.' } } } }),
   clientAppTitle: schema({ item_title: { validator: text(1, 120) } }),
+  clientAppFee: schema({ fee_type: { validator: enumOf(['fixed', 'percent'] as const) }, fee_value: { validator: (input) => typeof input === 'number' && Number.isFinite(input) && input >= 0 && input <= 1000000 ? { ok: true, value: input } : { ok: false, fields: { value: 'El valor de comisión debe ser un número entre 0 y 1.000.000.' } } } }),
 
   adminUserRole: schema({ systemRole: { validator: enumOf(['admin', 'user'] as const) }, businessRole: { validator: enumOf(['owner', 'employee'] as const), optional: true }, business_id: { validator: optionalUuid, optional: true }, assigned_store_id: { validator: optionalUuid, optional: true }, confirmAdmin: { validator: (input) => input === true ? { ok: true, value: true } : { ok: false, fields: { value: 'Confirmación inválida.' } }, optional: true } }),
 } satisfies Record<string, Schema>;

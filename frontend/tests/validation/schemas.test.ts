@@ -16,6 +16,7 @@ describe('schemas', () => {
     clientApp: { name: 'App cliente' },
     clientAppAmount: { deposit_default: 5000 },
     clientAppTitle: { item_title: 'Reserva' },
+    clientAppFee: { fee_type: 'fixed', fee_value: 1 },
   };
   it.each(Object.entries(validationSchemas))('%s accepts required fields', (name, schema) => {
     expect(schema(fixtures[name]).ok).toBe(true);

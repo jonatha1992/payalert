@@ -61,6 +61,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (!result.ok) throw new ScopeError('El título no puede superar los 120 caracteres.', 400);
       changes.item_title = result.value.item_title;
     }
+    if (body.fee_type !== undefined || body.fee_value !== undefined) {
+      const feeType = body.fee_type ?? 'fixed';
+      const feeValue = body.fee_value ?? 1;
+      const result = validationSchemas.clientAppFee({ fee_type: feeType, fee_value: feeValue });
+      if (!result.ok) throw new ScopeError(result.fields.fee_value ?? result.fields.fee_type ?? 'La comisión no es válida.', 400);
+      if (result.value.fee_type === 'percent' && Number(result.value.fee_value) > 50) throw new ScopeError('El porcentaje debe estar entre 0 y 50.', 400);
+      changes.fee_type = result.value.fee_type;
+      changes.fee_value = result.value.fee_value;
+    }
     if (!Object.keys(changes).length) throw new ScopeError('No hay cambios válidos para guardar.', 400);
     changes.updated_at = new Date().toISOString();
     const { data: app, error } = await db.from('client_apps').update(changes).eq('id', id).select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active').single();
