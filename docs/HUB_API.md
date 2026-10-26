@@ -26,6 +26,10 @@ El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con
 
 `GET /api/v1/charges/{bookingId}` usa la misma API key y validación de `Origin`. El segmento `{bookingId}` identifica el booking dentro de la app autenticada. Responde `{ "status": "...", "amount": 5000, "expiresAt": "...", "paymentId": "..." }`; `paymentId` solo se incluye cuando hay uno registrado. Si el booking no tiene cobro para la app autenticada, devuelve `404` sin revelar si existe para otra app.
 
+## Solicitar enlace de conexión
+
+POST /api/v1/connect-link requiere la API key Bearer de la app. Acepta un body JSON opcional con return_url HTTPS; por ahora se ignora, ya que el callback usa client_apps.connect_return_url configurado para esa app. Responde url y expires_at con un enlace de un solo uso válido 24 horas. Si ya hay conexión devuelve 409 con el error Ya hay una cuenta de Mercado Pago conectada. Valida Origin si está presente y permite llamadas servidor-a-servidor sin Origin.
+
 ## Estado de conexión
 
 `GET /api/v1/status` usa la misma API key y validación de `Origin`. Responde `{ "connected": true, "deposit_default": 5000 }` solo cuando la app tiene `connection_id` y la conexión asociada a su `business_id` tiene estado `CONNECTED`; en los demás casos `connected` es `false`. No expone identificadores de conexión, cuenta ni credenciales. `OPTIONS` implementa el preflight CORS con el mismo mecanismo de autenticación y allowlist.
