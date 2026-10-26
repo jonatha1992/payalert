@@ -17,10 +17,13 @@ async function audit(request: NextRequest, app: { id: string; business_id: strin
 }
 
 export async function OPTIONS(request: NextRequest) {
+  // El navegador manda el preflight sin body ni query: validamos el origin contra las apps activas.
   const origin = request.headers.get('origin'); const slug = new URL(request.url).searchParams.get('app');
-  if (!slug || !origin) return new NextResponse(null, { status: 403 });
-  const app = await loadClientApp(slug);
-  if (!app || !app.allowed_origins.includes(origin)) return new NextResponse(null, { status: 403 });
+  if (!origin) return new NextResponse(null, { status: 403 });
+  let allowed = false;
+  if (slug) { const app = await loadClientApp(slug); allowed = !!app && app.allowed_origins.includes(origin); }
+  else { const { data } = await getServiceClient().from('client_apps').select('allowed_origins').eq('active', true); allowed = (data ?? []).some((row: { allowed_origins: string[] | null }) => (row.allowed_origins ?? []).includes(origin)); }
+  if (!allowed) return new NextResponse(null, { status: 403 });
   return new NextResponse(null, { status: 204, headers: { ...corsHeaders(origin), 'Access-Control-Allow-Headers': 'Authorization, Content-Type' } });
 }
 
