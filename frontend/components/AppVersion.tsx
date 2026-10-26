@@ -6,7 +6,7 @@ export default function AppVersion() {
 
   return (
     <p className="text-[10px] text-gray-500 dark:text-gray-400 text-center" data-testid="app-version">
-      v{version}{buildTime ? ` · ${buildTime}` : ''}
+      {version === 'dev' ? 'Versión dev' : `Versión ${version}${buildTime ? ` · ${buildTime}` : ''}`}
     </p>
   );
 }

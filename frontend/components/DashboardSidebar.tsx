@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Store, CreditCard, Users, Settings, LogOut, FileText, DollarSign } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
-import AppVersion from '@/components/AppVersion';
 
 export default function DashboardSidebar() {
     const pathname = usePathname();
@@ -70,7 +69,6 @@ export default function DashboardSidebar() {
                     <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
                     <span className="font-medium text-sm">Cerrar Sesión</span>
                 </button>
-                <div className="mt-3"><AppVersion /></div>
             </div>
         </aside>
     );
