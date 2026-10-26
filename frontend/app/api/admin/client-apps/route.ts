@@ -32,24 +32,44 @@ export async function GET(request: NextRequest) {
   try {
     authorize(await getSessionProfile(request));
     const db = getServiceClient();
-    const { data, error } = await db.from('client_apps').select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active, created_at, businesses(name), payment_connections(provider, status), firebase_project_id, owner_emails').order('created_at', { ascending: false });
+    const { data, error } = await db.from('client_apps').select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active, created_at, businesses(name), payment_connections(provider, status), firebase_project_id, owner_emails, fee_type, fee_value').order('created_at', { ascending: false });
     if (error) throw error;
     const ids = (data ?? []).map((app) => app.id);
     const { data: charges, error: chargesError } = ids.length
       ? await db.from('hub_charges').select('client_app_id, amount, status, created_at').in('client_app_id', ids)
       : { data: [], error: null };
     if (chargesError) throw chargesError;
+    const connectionIds = [...new Set((data ?? []).map((app) => app.connection_id).filter((id): id is string => Boolean(id)))];
+    const { data: connectionRows, error: connectionError } = connectionIds.length
+      ? await db.from('payment_connections').select('id, provider, status, provider_account_id, label').in('id', connectionIds)
+      : { data: [], error: null };
+    if (connectionError) throw connectionError;
+    const connectionsById = new Map((connectionRows ?? []).map((connection) => [connection.id, { ...connection, mp_nickname: null as string | null, mp_email: null as string | null }]));
+    const { data: auditLogs, error: auditError } = ids.length
+      ? await db.from('audit_logs').select('entity_id, created_at, new_data').eq('action', 'browser_connect_link').in('entity_id', ids).order('created_at', { ascending: false })
+      : { data: [], error: null };
+    if (auditError) console.warn('[Admin client apps] connect attempt history unavailable:', auditError.message);
+    const attemptsByApp = new Map<string, { created_at: string; status: string | null; code: string | null }>();
+    for (const log of auditLogs ?? []) {
+      if (attemptsByApp.has(log.entity_id)) continue;
+      const auditData = log.new_data as { status?: unknown; code?: unknown } | null;
+      attemptsByApp.set(log.entity_id, { created_at: log.created_at, status: typeof auditData?.status === 'number' || typeof auditData?.status === 'string' ? String(auditData.status) : null, code: typeof auditData?.code === 'string' ? auditData.code : null });
+    }
     const apps = (data ?? []).map((app) => {
       const rows = (charges ?? []).filter((charge) => charge.client_app_id === app.id);
       const approved = rows.filter((charge) => charge.status === 'approved');
       const pending = rows.filter((charge) => charge.status === 'pending');
       const latest = rows.reduce<string | null>((value, charge) => !value || charge.created_at > value ? charge.created_at : value, null);
       const business = app.businesses as unknown as { name: string } | null;
-      const connection = app.payment_connections as unknown as { provider: string; status: string } | null;
+      const connection = (app.connection_id ? connectionsById.get(app.connection_id) : undefined);
+      const feeType = app.fee_type as 'fixed' | 'percent' | null;
+      const feeValue = app.fee_value as number | null;
       return {
         id: app.id, slug: app.slug, name: business?.name?.startsWith('app:') ? app.slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') : business?.name ?? app.slug, business_id: app.business_id, business_name: business?.name ?? null,
-        connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null, connection_connected: Boolean(app.connection_id && connection?.status === "active"),
-        allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title, firebase_project_id: app.firebase_project_id ?? null, owner_emails: app.owner_emails ?? [],
+        connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null, connection_connected: Boolean(app.connection_id && ['connected','active'].includes(connection?.status?.toLowerCase() ?? '')),
+        payment_account: connection ? { account_id: connection.provider_account_id, nickname: connection.mp_nickname, email: connection.mp_email, label: connection.label } : null,
+        last_connect_attempt: attemptsByApp.get(app.id) ?? null,
+        allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title, firebase_project_id: app.firebase_project_id ?? null, owner_emails: app.owner_emails ?? [], fee_type: feeType, fee_value: feeValue,
         active: app.active, metrics: { total: rows.length, approved: approved.length, pending: pending.length,
           approved_amount: approved.reduce((sum, charge) => sum + charge.amount, 0), latest_charge_at: latest },
       };
