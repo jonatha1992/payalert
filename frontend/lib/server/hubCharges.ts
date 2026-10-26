@@ -4,6 +4,7 @@ import { getServiceClient } from '@/lib/server/session';
 export type HubChargeStatus = 'creating' | 'pending' | 'approved' | 'refunding' | 'rejected' | 'expired' | 'refunded' | 'needs_refund';
 export type HubCharge = { id: string; client_app_id: string; booking_id: string; external_reference: string; amount: number; currency: string; preference_id: string | null; init_point: string | null; payment_id: string | null; status: HubChargeStatus; expires_at: string; idempotency_key: string; firestore_synced: boolean; last_error: string | null; payer_ref: string | null; booking_status: string | null; return_url: string | null };
 type ChargeClaim = Omit<HubCharge, 'id'|'preference_id'|'init_point'|'payment_id'|'status'|'firestore_synced'|'last_error'|'payer_ref'|'booking_status'|'return_url'> & Partial<Pick<HubCharge, 'payer_ref'|'booking_status'|'return_url'>>;
+type ChargeClaimWithFee = ChargeClaim & { fee_amount: number };
 type TransitionStatus = Exclude<HubChargeStatus, 'creating'>;
 const transitions: Record<HubChargeStatus, readonly HubChargeStatus[]> = { creating: ['pending'], pending: ['approved','rejected','expired','needs_refund'], approved: ['refunding'], refunding: ['approved','refunded'], rejected: [], expired: ['needs_refund'], needs_refund: [], refunded: [] };
 export const hubChargeTransitions: Record<HubChargeStatus, readonly HubChargeStatus[]> = transitions;
@@ -14,8 +15,14 @@ export async function findCharge(appId: string, bookingId: string): Promise<HubC
   return data as HubCharge | null;
 }
 
-export async function claimCharge(input: ChargeClaim): Promise<{ created: boolean; charge: HubCharge }> {
-  const { data, error } = await getServiceClient().from('hub_charges').insert({ ...input, status: 'creating' }).select('*').maybeSingle();
+export async function claimCharge(input: ChargeClaimWithFee): Promise<{ created: boolean; charge: HubCharge }> {
+  const db = getServiceClient();
+  let result = await db.from('hub_charges').insert({ ...input, status: 'creating' }).select('*').maybeSingle();
+  if (result.error && (result.error.code === '42703' || result.error.message?.includes('fee_amount'))) {
+    const { fee_amount: _feeAmount, ...legacyInput } = input;
+    result = await db.from('hub_charges').insert({ ...legacyInput, status: 'creating' }).select('*').maybeSingle();
+  }
+  const { data, error } = result;
   if (error) throw error;
   if (data) return { created: true, charge: data as HubCharge };
   const existing = await findCharge(input.client_app_id, input.booking_id);

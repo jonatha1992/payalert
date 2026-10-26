@@ -6,6 +6,7 @@ import { claimCharge, updateCreatingCharge } from '@/lib/server/hubCharges';
 import { corsHeaders } from '@/lib/server/hubHttp';
 import { getServiceClient } from '@/lib/server/session';
 import { decryptSecret } from '@/lib/payments/secretBox';
+import { computeFee } from '@/lib/server/hubFee';
 
 function jsonError(error: string, status: number, headers: Record<string, string> = {}) { return NextResponse.json({ error }, { status, headers }); }
 function validBody(value: unknown): value is { bookingId: string; payerRef: string; amount?: number; payerEmail?: string; returnUrl: string } {
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
     if (!app.allowed_origins.some((allowed) => body.returnUrl.startsWith(allowed))) return jsonError('return_url_denied', 400, headers);
     const amount = chargeAmount(body, app.deposit_default);
     if (amount === null) return jsonError('amount_must_be_integer_ars_between_1_and_1000000', 400, headers);
+    const { data: feeSettings, error: feeSettingsError } = await getServiceClient().from('client_apps').select('fee_type,fee_value').eq('id', app.id).maybeSingle();
+    const feeResult = computeFee(amount, feeSettingsError ? undefined : feeSettings?.fee_type, feeSettingsError ? undefined : feeSettings?.fee_value);
+    if ('error' in feeResult) return NextResponse.json({ error: feeResult.error }, { status: 422, headers });
     if (!app.connection_id) return jsonError('connection_unavailable', 409, headers);
     const { data: connection, error: connectionError } = await getServiceClient().from('payment_connections')
       .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
     const expires = new Date(Date.now() + 15 * 60_000);
     const externalReference = randomUUID();
     const idempotencyKey = `${app.id}:${body.bookingId}`;
-    const claim = await claimCharge({ client_app_id: app.id, booking_id: body.bookingId, external_reference: externalReference, amount, currency: 'ARS', expires_at: expires.toISOString(), idempotency_key: idempotencyKey, payer_ref: body.payerRef, return_url: body.returnUrl });
+    const claim = await claimCharge({ client_app_id: app.id, booking_id: body.bookingId, external_reference: externalReference, amount, currency: 'ARS', expires_at: expires.toISOString(), idempotency_key: idempotencyKey, payer_ref: body.payerRef, return_url: body.returnUrl, fee_amount: feeResult.fee });
     if (!claim.created) {
       if (claim.charge.amount !== amount) return jsonError('booking_amount_conflict', 409, headers);
       if (claim.charge.init_point) return NextResponse.json({ chargeId: claim.charge.id, checkoutUrl: claim.charge.init_point, expiresAt: claim.charge.expires_at, status: claim.charge.status }, { headers });
@@ -74,6 +78,7 @@ export async function POST(request: NextRequest) {
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
       back_urls: { success: body.returnUrl, failure: body.returnUrl, pending: body.returnUrl },
       auto_return: 'approved', expires: true, date_of_expiration: expires.toISOString(),
+      ...(feeResult.fee > 0 ? { marketplace_fee: feeResult.fee } : {}),
     };
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idempotencyKey }, body: JSON.stringify(payload),
