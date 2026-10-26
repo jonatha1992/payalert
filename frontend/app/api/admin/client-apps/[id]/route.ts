@@ -11,8 +11,8 @@ function authorize(profile: Awaited<ReturnType<typeof getSessionProfile>>) {
   return profile;
 }
 
-function originsValid(input: unknown): input is string[] {
-  return Array.isArray(input) && input.length > 0 && input.every((origin) => typeof origin === 'string' && !origin.includes('*') && (/^https:\/\/[^/\s]+(?::\d+)?$/.test(origin) || /^http:\/\/localhost(?::\d+)?$/.test(origin))) && new Set(input).size === input.length;
+function originsValid(input: unknown, allowEmpty = false): input is string[] {
+  return Array.isArray(input) && (allowEmpty || input.length > 0) && input.every((origin) => typeof origin === 'string' && !origin.includes('*') && (/^https:\/\/[^/\s]+(?::\d+)?$/.test(origin) || /^http:\/\/localhost(?::\d+)?$/.test(origin))) && new Set(input).size === input.length;
 }
 
 function responseError(error: unknown) {
@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       changes.active = body.active;
     }
     if (body.allowed_origins !== undefined) {
-      if (!originsValid(body.allowed_origins)) throw new ScopeError('Los orígenes deben ser HTTPS o localhost, sin comodines ni duplicados.', 400);
+      if (!originsValid(body.allowed_origins, true)) throw new ScopeError('Los orígenes deben ser HTTPS o localhost, sin comodines ni duplicados.', 400);
       changes.allowed_origins = body.allowed_origins;
     }
     if (body.deposit_default !== undefined) {

@@ -11,8 +11,8 @@ function authorize(profile: Awaited<ReturnType<typeof getSessionProfile>>) {
   return profile;
 }
 
-function originsValid(input: unknown): input is string[] {
-  return Array.isArray(input) && input.length > 0 && input.every((origin) =>
+function originsValid(input: unknown, allowEmpty = false): input is string[] {
+  return Array.isArray(input) && (allowEmpty || input.length > 0) && input.every((origin) =>
     typeof origin === 'string' && !origin.includes('*') &&
     (/^https:\/\/[^/\s]+(?::\d+)?$/.test(origin) || /^http:\/\/localhost(?::\d+)?$/.test(origin))
   ) && new Set(input).size === input.length;
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       const business = app.businesses as unknown as { name: string } | null;
       const connection = app.payment_connections as unknown as { provider: string; status: string } | null;
       return {
-        id: app.id, slug: app.slug, business_id: app.business_id, business_name: business?.name ?? null,
+        id: app.id, slug: app.slug, name: business?.name?.startsWith('app:') ? app.slug.split('-').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') : business?.name ?? app.slug, business_id: app.business_id, business_name: business?.name ?? null,
         connection_id: app.connection_id, connection_provider: connection?.provider ?? null, connection_status: connection?.status ?? null, connection_connected: Boolean(app.connection_id && connection?.status === "active"),
         allowed_origins: app.allowed_origins, deposit_default: app.deposit_default, item_title: app.item_title,
         active: app.active, metrics: { total: rows.length, approved: approved.length, pending: pending.length,
@@ -65,17 +65,49 @@ export async function POST(request: NextRequest) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ScopeError('Ingresá datos válidos.', 400);
     const body = raw as Record<string, unknown>;
     const validated = validationSchemas.clientApp(body);
-    if (!validated.ok) throw new ScopeError(Object.values(validated.fields)[0] ?? 'Ingresá datos válidos.', 400);
-    if (!originsValid(body.allowed_origins)) throw new ScopeError('Los orígenes deben ser HTTPS o localhost, sin comodines ni duplicados.', 400);
+    if (!validated.ok) throw new ScopeError(Object.values(validated.fields)[0] ?? 'Ingresá un nombre válido.', 400);
+    const normalizedName = String(validated.value.name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const slug = normalizedName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!slug || slug.length > 50 || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) throw new ScopeError('El nombre debe generar un identificador válido con letras y números.', 400);
     const db = getServiceClient();
-    const { data: connection, error: connectionError } = await db.from('payment_connections').select('id').eq('id', validated.value.connection_id).eq('business_id', validated.value.business_id).maybeSingle();
-    if (connectionError) throw connectionError;
-    if (!connection) throw new ScopeError('La conexión no pertenece al negocio seleccionado.', 400);
-    const apiKey = keyFor(String(validated.value.slug));
+    const businessName = 'app:' + slug;
+    let businessId: string | undefined;
+    const { data: existingBusiness, error: businessLookupError } = await db.from('businesses').select('id').eq('name', businessName).maybeSingle();
+    if (businessLookupError?.code === '23505') {
+      const { data: racedBusiness, error: racedLookupError } = await db.from('businesses').select('id').eq('name', businessName).single();
+      if (racedLookupError) throw racedLookupError;
+      businessId = racedBusiness.id;
+    } else if (businessLookupError) throw businessLookupError;
+    else businessId = existingBusiness?.id;
+    if (!businessId) {
+      const { data: createdBusiness, error: businessCreateError } = await db.from('businesses').insert({ name: businessName }).select('id').single();
+      if (businessCreateError?.code === '23505') {
+        const { data: racedBusiness, error: racedLookupError } = await db.from('businesses').select('id').eq('name', businessName).single();
+        if (racedLookupError) throw racedLookupError;
+        businessId = racedBusiness.id;
+      } else if (businessCreateError) throw businessCreateError;
+      else businessId = createdBusiness.id;
+    }
+    const connectionId = body.connection_id === undefined || body.connection_id === null || body.connection_id === '' ? null : body.connection_id;
+    if (connectionId !== null) {
+      if (typeof connectionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(connectionId)) throw new ScopeError('Ingresá una conexión válida.', 400);
+      const { data: connection, error: connectionError } = await db.from('payment_connections').select('id').eq('id', connectionId).eq('business_id', businessId).maybeSingle();
+      if (connectionError) throw connectionError;
+      if (!connection) throw new ScopeError('La conexión no pertenece al negocio seleccionado.', 400);
+    }
+    const allowedOrigins = body.allowed_origins === undefined ? [] : body.allowed_origins;
+    if (!originsValid(allowedOrigins, true)) throw new ScopeError('Los orígenes deben ser HTTPS o localhost, sin comodines ni duplicados.', 400);
+    const depositDefault = body.deposit_default === undefined ? 5000 : body.deposit_default;
+    const validatedAmount = validationSchemas.clientAppAmount({ deposit_default: depositDefault });
+    if (!validatedAmount.ok) throw new ScopeError('El monto debe ser un entero entre 1 y 1.000.000.', 400);
+    const itemTitle = body.item_title === undefined ? 'Seña' : body.item_title;
+    const validatedTitle = validationSchemas.clientAppTitle({ item_title: itemTitle });
+    if (!validatedTitle.ok) throw new ScopeError('El título no puede superar los 120 caracteres.', 400);
+    const apiKey = keyFor(slug);
     const { data: app, error } = await db.from('client_apps').insert({
-      slug: validated.value.slug, business_id: validated.value.business_id, connection_id: validated.value.connection_id,
-      allowed_origins: body.allowed_origins, deposit_default: validated.value.deposit_default,
-      item_title: validated.value.item_title, api_key_hash: createHash('sha256').update(apiKey).digest('hex'), active: true,
+      slug, business_id: businessId, connection_id: connectionId,
+      allowed_origins: allowedOrigins, deposit_default: validatedAmount.value.deposit_default,
+      item_title: validatedTitle.value.item_title, api_key_hash: createHash('sha256').update(apiKey).digest('hex'), active: true,
     }).select('id, slug, business_id, connection_id, allowed_origins, deposit_default, item_title, active').single();
     if (error) {
       if (error.code === '23505') throw new ScopeError('Ya existe una app con ese identificador.', 400);
