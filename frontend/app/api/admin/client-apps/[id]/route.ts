@@ -84,3 +84,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ app });
   } catch (error) { return responseError(error); }
 }
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const profile = authorize(await getSessionProfile(request));
+    const { id } = await context.params;
+    const db = getServiceClient();
+    const { data: app, error: lookupError } = await db.from('client_apps').select('id, business_id').eq('id', id).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!app) return NextResponse.json({ error: 'App no encontrada', code: 'not_found' }, { status: 404 });
+
+    const { data: charges, error: chargesError } = await db.from('hub_charges').select('id').eq('client_app_id', id);
+    if (chargesError) throw chargesError;
+    if ((charges ?? []).length > 0) {
+      const { error } = await db.from('client_apps').update({ active: false }).eq('id', id);
+      if (error) throw error;
+      try { await recordAuditEvent(db, { businessId: app.business_id, actorId: profile.userId, action: 'client_app_archived', entityType: 'client_app', entityId: id }); } catch (auditError) { console.error('[Admin client app] audit failed:', auditError instanceof Error ? auditError.message : 'unknown'); }
+      return NextResponse.json({ archived: true });
+    }
+
+    const { error: inviteError } = await db.from('connect_invites').delete().eq('client_app_id', id);
+    if (inviteError) throw inviteError;
+    const { error: deleteError } = await db.from('client_apps').delete().eq('id', id);
+    if (deleteError) throw deleteError;
+    try { await recordAuditEvent(db, { businessId: app.business_id, actorId: profile.userId, action: 'client_app_deleted', entityType: 'client_app', entityId: id }); } catch (auditError) { console.error('[Admin client app] audit failed:', auditError instanceof Error ? auditError.message : 'unknown'); }
+    return NextResponse.json({ deleted: true });
+  } catch (error) { return responseError(error); }
+}
