@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (appError) throw appError;
     if (!app) throw new ScopeError('App vinculada no encontrada.', 404);
     if (!app.active) throw new ScopeError('La app está inactiva; activala antes de generar un enlace.', 400);
-    if (app.connection_id) throw new ScopeError('La app ya tiene una conexión asociada.', 400);
+    if (typeof app.connection_id === 'string' && app.connection_id.length > 0) throw new ScopeError('La app ya tiene una conexión asociada.', 400);
     const token = 'ci_' + randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
