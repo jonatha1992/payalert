@@ -9,9 +9,10 @@ export async function verifyFirebaseIdToken(token: string, projectId: string): P
       issuer: `https://securetoken.google.com/${projectId}`,
       audience: projectId,
     });
-    if (typeof payload.sub !== 'string' || !payload.sub || payload.email_verified !== true || typeof payload.email !== 'string') return null;
+    if (typeof payload.sub !== 'string' || !payload.sub || payload.email_verified !== true || typeof payload.email !== 'string') { console.warn('[firebaseIdToken] claims rechazados', { aud: payload.aud, email_verified: payload.email_verified, has_email: typeof payload.email === 'string' }); return null; }
     return { uid: payload.sub, email: payload.email.toLowerCase() };
-  } catch {
+  } catch (error) {
+    console.warn('[firebaseIdToken] verificacion fallida', { code: (error as { code?: string })?.code, message: (error as Error)?.message?.slice(0, 160), projectId });
     return null;
   }
 }
