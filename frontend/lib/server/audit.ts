@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type AuditAction = 'USER_CREATED' | 'USER_DELETED' | 'USER_ROLE_CHANGED' | 'CONFIGURATION_UPDATED' | 'MANUAL_RESOLUTION' | 'LOGIN' | 'LOGOUT' | 'browser_connect_link' | 'client_app_deleted' | 'client_app_archived';
+export type AuditAction = 'USER_CREATED' | 'USER_DELETED' | 'USER_ROLE_CHANGED' | 'CONFIGURATION_UPDATED' | 'MANUAL_RESOLUTION' | 'LOGIN' | 'LOGOUT' | 'browser_connect_link' | 'browser_charge' | 'client_app_deleted' | 'client_app_archived';
 
 /** Audit payloads intentionally contain identifiers and action metadata only, never submitted user data or network addresses. */
 export async function recordAuditEvent(db: SupabaseClient, event: {

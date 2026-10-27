@@ -1,0 +1,5 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { loadClientApp, originAllowedForAnyApp } from '@/lib/server/clientApps';
+import { corsHeaders } from '@/lib/server/hubHttp';
+export async function OPTIONS(request: NextRequest) { const origin=request.headers.get('origin'); if(!origin || !await originAllowedForAnyApp(origin)) return new NextResponse(null,{status:403}); return new NextResponse(null,{status:204,headers:{...corsHeaders(origin),'Access-Control-Allow-Headers':'Authorization, Content-Type'}}); }
+export async function GET(request: NextRequest) { const origin=request.headers.get('origin'); const slug=new URL(request.url).searchParams.get('app'); if(!slug) return NextResponse.json({error:'invalid_app',code:'invalid_app'},{status:400}); const app=await loadClientApp(slug); if(!app) return NextResponse.json({error:'app_not_found',code:'app_not_found'},{status:404}); if(!origin || !app.allowed_origins.includes(origin)) return NextResponse.json({error:'origin_not_allowed',code:'origin_not_allowed'},{status:403}); return NextResponse.json({deposit:app.deposit_default,connected:!!app.connection_id},{headers:corsHeaders(origin)}); }
