@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     if (!app.connection_id) return jsonError('connection_unavailable', 409, headers);
     const { data: connection, error: connectionError } = await getServiceClient().from('payment_connections')
       .select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
-    if (connectionError || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });
+    if (connectionError || !connection || !['mercadopago','mercado_pago'].includes(String(connection.provider).toLowerCase()) || !['active','connected'].includes(String(connection.status).toLowerCase())) return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });
     const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token?: string };
     const token = credentials.access_token?.trim();
     if (!token) return NextResponse.json({ error: 'connection_unavailable' }, { status: 409, headers });

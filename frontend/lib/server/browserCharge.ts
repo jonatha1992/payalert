@@ -13,7 +13,7 @@ export async function createBrowserCharge(app: ClientApp, bookingId: string, amo
   const fee = computeFee(amount, settingsError ? undefined : settings?.fee_type, settingsError ? undefined : settings?.fee_value);
   if ('error' in fee) throw new Error(fee.error);
   const { data: connection, error } = await db.from('payment_connections').select('provider,status,credentials_encrypted').eq('id', app.connection_id).eq('business_id', app.business_id).maybeSingle();
-  if (error || !connection || connection.provider !== 'mercadopago' || connection.status !== 'active') throw new Error('not_connected');
+  if (error || !connection || !['mercadopago','mercado_pago'].includes(String(connection.provider).toLowerCase()) || !['active','connected'].includes(String(connection.status).toLowerCase())) throw new Error('not_connected');
   const credentials = JSON.parse(decryptSecret(connection.credentials_encrypted)) as { access_token?: string };
   const token = credentials.access_token?.trim();
   if (!token) throw new Error('not_connected');
