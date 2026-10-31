@@ -6,7 +6,7 @@ import { claimCharge, updateCreatingCharge } from '@/lib/server/hubCharges';
 import { getServiceClient } from '@/lib/server/session';
 import type { ClientApp } from '@/lib/server/clientApps';
 
-export async function createBrowserCharge(app: ClientApp, bookingId: string, amount: number, payerName?: string): Promise<{ init_point: string; status: 'pending' }> {
+export async function createBrowserCharge(app: ClientApp, bookingId: string, amount: number, payerName?: string, requestOrigin?: string | null): Promise<{ init_point: string; status: 'pending' }> {
   if (!app.connection_id) throw new Error('not_connected');
   const db = getServiceClient();
   const { data: settings, error: settingsError } = await db.from('client_apps').select('fee_type,fee_value').eq('id', app.id).maybeSingle();
@@ -20,13 +20,31 @@ export async function createBrowserCharge(app: ClientApp, bookingId: string, amo
   const expires = new Date(Date.now() + 15 * 60_000);
   const externalReference = randomUUID();
   const idempotencyKey = `${app.id}:${bookingId}`;
-  const claim = await claimCharge({ client_app_id: app.id, booking_id: bookingId, external_reference: externalReference, amount, currency: 'ARS', expires_at: expires.toISOString(), idempotency_key: idempotencyKey, payer_ref: bookingId, return_url: null, fee_amount: fee.fee });
+  const returnBase = (requestOrigin && app.allowed_origins.includes(requestOrigin))
+    ? requestOrigin
+    : (app.allowed_origins[0] || '');
+  const returnUrl = returnBase ? `${returnBase}/?pago=${encodeURIComponent(bookingId)}` : null;
+  const claim = await claimCharge({ client_app_id: app.id, booking_id: bookingId, external_reference: externalReference, amount, currency: 'ARS', expires_at: expires.toISOString(), idempotency_key: idempotencyKey, payer_ref: bookingId, return_url: returnUrl, fee_amount: fee.fee });
   if (!claim.created) {
     if (claim.charge.init_point) return { init_point: claim.charge.init_point, status: claim.charge.status === 'approved' ? 'approved' as never : 'pending' };
     throw new Error('charge_in_progress');
   }
   try {
-    const payload = { items: [{ title: (app.item_title?.trim() || 'Seña').slice(0, 120), quantity: 1, currency_id: 'ARS', unit_price: amount }], payer: payerName ? { name: payerName } : undefined, external_reference: externalReference, notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`, ...(fee.fee > 0 ? { marketplace_fee: fee.fee } : {}) };
+    const payload = {
+      items: [{ title: (app.item_title?.trim() || 'Seña').slice(0, 120), quantity: 1, currency_id: 'ARS', unit_price: amount }],
+      payer: payerName ? { name: payerName } : undefined,
+      external_reference: externalReference,
+      notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
+      ...(returnUrl ? {
+        back_urls: {
+          success: returnUrl,
+          failure: returnUrl,
+          pending: returnUrl,
+        },
+        auto_return: 'approved',
+      } : {}),
+      ...(fee.fee > 0 ? { marketplace_fee: fee.fee } : {})
+    };
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idempotencyKey }, body: JSON.stringify(payload) });
     if (!response.ok) throw new Error('mp_preference_failed');
     const preference: unknown = await response.json();
