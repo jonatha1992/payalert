@@ -9,6 +9,7 @@ import { getServiceClient } from '@/lib/server/session';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 type FirestoreDocument = { fields?: Record<string, { stringValue?: unknown }> };
+type FirestoreBooking = { uid?: string; date?: string; time?: string; status?: string };
 
 function bookingField(document: FirestoreDocument, key: string): string | undefined {
   const value = document.fields?.[key]?.stringValue;
