@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     const preference: unknown = await response.json();
     if (!preference || typeof preference !== 'object' || typeof (preference as { id?: unknown }).id !== 'string' || typeof (preference as { init_point?: unknown }).init_point !== 'string') throw new Error('Mercado Pago returned an invalid preference');
     const validPreference = preference as { id: string; init_point: string };
-    await updateCreatingCharge(claimedId, { preference_id: validPreference.id, init_point: validPreference.init_point });
+    await updateCreatingCharge(claimedId, { status: 'pending', preference_id: validPreference.id, init_point: validPreference.init_point });
     claimedId = null;
     return NextResponse.json({ chargeId: claim.charge.id, checkoutUrl: validPreference.init_point, expiresAt: expires.toISOString(), status: 'pending' }, { headers });
   } catch (error) {

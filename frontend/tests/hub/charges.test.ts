@@ -54,7 +54,7 @@ describe('POST /api/v1/charges', () => {
     expect(Date.parse(payload.date_of_expiration) - Date.now()).toBeGreaterThan(14 * 60_000);
     expect(Date.parse(payload.date_of_expiration) - Date.now()).toBeLessThanOrEqual(15 * 60_000);
     expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2, booking_id: 'b1', client_app_id: 'app-1' }));
-    expect(mocks.updateCharge).toHaveBeenCalledWith('charge-1', { preference_id: 'pref-1', init_point: 'https://mp.test/pref' });
+    expect(mocks.updateCharge).toHaveBeenCalledWith('charge-1', { status: 'pending', preference_id: 'pref-1', init_point: 'https://mp.test/pref' });
   });
   it('accepts an explicit amount of 2500 ARS', async () => { const response = await POST(request({ bookingId: 'b1', amount: 2500 })); expect(response.status).toBe(200); expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2500 })); const [, init] = mocks.fetch.mock.calls[0]; expect(JSON.parse(init.body).items[0].unit_price).toBe(2500); });
   it.each([0, -1, 1.5, 1_000_001, '100'])('rejects invalid amount %s before accessing the connection', async (amount) => { const response = await POST(request({ bookingId: 'b1', amount })); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'amount_must_be_integer_ars_between_1_and_1000000' }); expect(mocks.getService).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.fetch).not.toHaveBeenCalled(); });
