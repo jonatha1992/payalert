@@ -50,7 +50,7 @@ export async function createBrowserCharge(app: ClientApp, bookingId: string, amo
     const preference: unknown = await response.json();
     if (!preference || typeof preference !== 'object' || typeof (preference as { id?: unknown }).id !== 'string' || typeof (preference as { init_point?: unknown }).init_point !== 'string') throw new Error('invalid_preference');
     const p = preference as { id: string; init_point: string };
-    await updateCreatingCharge(claim.charge.id, { preference_id: p.id, init_point: p.init_point });
+    await updateCreatingCharge(claim.charge.id, { status: 'pending', preference_id: p.id, init_point: p.init_point });
     return { init_point: p.init_point, status: 'pending' };
   } catch (error) {
     await db.from('hub_charges').delete().eq('id', claim.charge.id).eq('status', 'creating');

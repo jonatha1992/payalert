@@ -90,6 +90,12 @@ describe('createBrowserCharge return_url & auto_return', () => {
 
     expect(res.status).toBe('pending');
     expect(res.init_point).toBe('https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=pref-999');
+    expect(mocks.updatedCharge).toEqual({
+      id: 'charge-123',
+      status: 'pending',
+      preference_id: 'pref-999',
+      init_point: 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=pref-999',
+    });
 
     expect(mocks.claimedCharge.return_url).toBe('https://huellitasfelices.web.app/?pago=booking-123');
 
