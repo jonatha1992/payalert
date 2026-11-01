@@ -235,7 +235,42 @@ CREATE POLICY "users_admin_all" ON public.users
     );
 
 CREATE POLICY "users_self_update" ON public.users
-    FOR UPDATE USING (id = auth.uid());
+    FOR UPDATE
+    USING (id = auth.uid())
+    WITH CHECK (id = auth.uid());
+
+CREATE OR REPLACE FUNCTION public.protect_users_critical_columns()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_caller_role TEXT;
+BEGIN
+    IF (NEW.role IS NOT DISTINCT FROM OLD.role) AND (NEW.business_id IS NOT DISTINCT FROM OLD.business_id) THEN
+        RETURN NEW;
+    END IF;
+
+    IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
+        RETURN NEW;
+    END IF;
+
+    IF current_user IN ('postgres', 'supabase_admin') AND current_setting('request.jwt.claim.sub', true) IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT role INTO v_caller_role FROM public.users WHERE id = auth.uid();
+    IF v_caller_role = 'admin' THEN
+        RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION 'Unauthorized: only administrators can change role or business_id'
+        USING ERRCODE = '42501';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS tr_protect_users_critical_columns ON public.users;
+CREATE TRIGGER tr_protect_users_critical_columns
+    BEFORE UPDATE ON public.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_users_critical_columns();
 
 -- Stores
 ALTER TABLE public.stores ENABLE ROW LEVEL SECURITY;
