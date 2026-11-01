@@ -27,7 +27,7 @@ describe('activeCheckCharge', () => {
 
   it('feeds MP payments of a pending charge through applyHubPayment', async () => {
     expect(await activeCheckCharge(app, charge('c1'), { fetchImpl: okFetch as never, now: () => 1e12 })).toBe(true);
-    expect(okFetch.mock.calls[0][0]).toContain('external_reference=ref-1');
+    expect(String((okFetch.mock.calls[0] as unknown[])[0])).toContain('external_reference=ref-1');
     expect(mock.apply).toHaveBeenCalledWith(expect.objectContaining({ externalId: '111', status: 'CONFIRMED' }), expect.anything());
   });
 
