@@ -13,11 +13,10 @@ import { encryptSecret } from "@/lib/payments/secretBox";
 import { recordAuditEvent } from "@/lib/server/audit";
 import { can } from "@/lib/server/rbac";
 import { ScopeError, resolveScope } from "@/lib/server/scope";
-import {
-  getServiceClient,
-  getSessionProfile,
-  scopeErrorResponse,
-} from "@/lib/server/session";
+import { getServiceClient, getSessionProfile, scopeErrorResponse } from "@/lib/server/session";
+import type { ClientApp } from "@/lib/server/clientApps";
+
+function originAllowed(app: ClientApp, origin: string | null): boolean { return !!origin && app.allowed_origins.includes(origin); }
 
 function unavailable() {
   return NextResponse.json(
@@ -126,6 +125,26 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCallback(request: NextRequest) {
+  const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
+  if (!code || !state) return NextResponse.redirect(new URL("/dashboard/integrations?oauth=failed", request.url));
+  let db: ReturnType<typeof getServiceClient>;
+  try { db = getServiceClient(); } catch (error) {
+    console.error("[MP OAuth callback] database unavailable:", safeError(error));
+    return NextResponse.redirect(new URL("/dashboard/integrations?oauth=failed", request.url));
+  }
+  try {
+    const { data: row, error } = await db.from("mp_oauth_states").select("state_hash,business_id,user_id,invite_id,nonce_hash,expires_at,consumed_at").eq("state_hash", digestOAuthState(state)).maybeSingle();
+    if (error) throw error;
+    if (row?.invite_id && row.user_id === null) return handleInviteCallback(request, code, state, row, db);
+    return await handleOwnerCallback(request, code, state, db);
+  } catch (error) {
+    console.error("[MP OAuth callback] failed:", safeError(error));
+    return NextResponse.redirect(new URL("/dashboard/integrations?oauth=failed", request.url));
+  }
+}
+
+async function handleOwnerCallback(request: NextRequest, code: string, state: string, db: ReturnType<typeof getServiceClient>) {
   try {
     const profile = await getSessionProfile(request);
     if (!profile) throw new ScopeError("No autenticado", 401);
@@ -133,9 +152,6 @@ async function handleCallback(request: NextRequest) {
       throw new ScopeError("Permiso insuficiente", 403);
     const config = oauthConfig();
     if (!config || !process.env.MP_OAUTH_STATE_SECRET) return unavailable();
-    const code = request.nextUrl.searchParams.get("code");
-    const state = request.nextUrl.searchParams.get("state");
-    if (!code || !state) throw new ScopeError("Respuesta OAuth inválida", 400);
     // One-time claim is atomic: concurrent callback replays cannot both consume the state.
     const statePayload = JSON.parse(
       Buffer.from(state.split(".")[0] ?? "", "base64url").toString("utf8"),
@@ -152,7 +168,6 @@ async function handleCallback(request: NextRequest) {
     } catch {
       throw new ScopeError("Estado OAuth inválido o vencido", 400);
     }
-    const db = getServiceClient();
     const now = new Date().toISOString();
     const { data: claimed, error: claimError } = await db
       .from("mp_oauth_states")
@@ -242,4 +257,73 @@ async function handleCallback(request: NextRequest) {
       new URL("/dashboard/integrations?oauth=failed", request.url),
     );
   }
+}
+
+async function handleInviteCallback(request: NextRequest, code: string, state: string, row: { state_hash: string; business_id: string; invite_id: string; user_id: null }, db: ReturnType<typeof getServiceClient>) {
+  let app: (ClientApp & { connect_return_url: string | null }) | null = null;
+  try {
+    const { data: invite, error } = await db.from('connect_invites').select('id,client_app_id,expires_at,used_at,client_apps!inner(id,business_id,active,connect_return_url,allowed_origins,api_key_hash,connection_id,deposit_default)').eq('id', row.invite_id).maybeSingle();
+    if (error) throw error;
+    const raw = invite as { id: string; client_app_id: string; expires_at: string; used_at: string | null; client_apps: unknown } | null;
+    const joined = Array.isArray(raw?.client_apps) ? raw.client_apps[0] : raw?.client_apps;
+    app = joined && typeof joined === 'object' ? joined as ClientApp & { connect_return_url: string | null } : null;
+    const now = new Date().toISOString();
+    if (!raw || raw.used_at || raw.expires_at <= now || raw.client_app_id !== app?.id || app.business_id !== row.business_id || !app.active || !app.connect_return_url || !originAllowed(app, new URL(app.connect_return_url).origin)) throw new Error('Connect invitation is invalid, expired, used, or return origin not allowed');
+    const config = oauthConfig();
+    if (!config || !process.env.MP_OAUTH_STATE_SECRET) throw new Error('OAuth not configured');
+    const payload = verifyOAuthState(state, { tenantId: row.business_id, userId: `invite:${row.invite_id}` });
+    const { data: claimed, error: claimError } = await db.from('mp_oauth_states').update({ consumed_at: now }).eq('state_hash', row.state_hash).eq('business_id', row.business_id).eq('invite_id', row.invite_id).is('user_id', null).is('consumed_at', null).gt('expires_at', now).select('state_hash').maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) throw new Error('OAuth invitation state already used or expired');
+    const tokens = await exchangeAuthorizationCode(code, config);
+    const accountId = await resolveAccountId(tokens);
+    const connectionId = await saveConnection(db, row.business_id, accountId, tokens, null, now);
+    const { error: linkError } = await db.from('client_apps').update({ connection_id: connectionId }).eq('id', app.id).eq('business_id', row.business_id).eq('active', true);
+    if (linkError) throw linkError;
+    const { data: used, error: useError } = await db.from('connect_invites').update({ used_at: now }).eq('id', row.invite_id).eq('client_app_id', app.id).is('used_at', null).gt('expires_at', now).select('id').maybeSingle();
+    if (useError) throw useError;
+    if (!used) throw new Error('Invitation already consumed');
+    await recordAuditEvent(db, { businessId: row.business_id, actorId: null, action: 'CONFIGURATION_UPDATED', entityType: 'payment_connection', entityId: connectionId, newData: { provider: 'mercado_pago', auth: 'oauth', client_app_id: app.id, invite_id: row.invite_id, nonce: payload.nonce } });
+    return NextResponse.redirect(connectReturnUrl(app, 'connected'));
+  } catch (error) {
+    console.error('[MP OAuth invite callback] failed:', safeError(error));
+    if (app?.connect_return_url) {
+      try {
+        if (originAllowed(app, new URL(app.connect_return_url).origin)) return NextResponse.redirect(connectReturnUrl(app, 'failed'));
+      } catch {
+        // Invalid configured return URLs must fall back to PayAlert, never escape the allowlist.
+      }
+    }
+    return NextResponse.redirect(new URL('/dashboard/integrations?oauth=failed', request.url));
+  }
+}
+function connectReturnUrl(app: ClientApp & { connect_return_url: string | null }, status: 'connected' | 'failed'): URL {
+  if (!app.connect_return_url || !originAllowed(app, new URL(app.connect_return_url).origin)) throw new Error('Connect return URL is not allowed');
+  const url = new URL(app.connect_return_url);
+  url.searchParams.set('mp', status);
+  return url;
+}
+async function resolveAccountId(tokens: Awaited<ReturnType<typeof exchangeAuthorizationCode>>): Promise<string> {
+  let id = tokens.user_id === undefined ? null : String(tokens.user_id);
+  if (!id) {
+    const response = await fetch("https://api.mercadopago.com/users/me", { headers: { Authorization: "Bearer " + tokens.access_token } });
+    if (!response.ok) throw new Error('Mercado Pago rechazó la cuenta autorizada');
+    const identity = await response.json() as { id?: string | number };
+    id = identity.id === undefined ? null : String(identity.id);
+  }
+  if (!id) throw new Error('Mercado Pago no devolvió la cuenta autorizada');
+  return id;
+}
+async function saveConnection(db: ReturnType<typeof getServiceClient>, businessId: string, accountId: string, tokens: Awaited<ReturnType<typeof exchangeAuthorizationCode>>, actorId: string | null, now: string): Promise<string> {
+  const credentials = { access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(), auth_type: 'oauth' };
+  const { data: existing, error: lookupError } = await db.from('payment_connections').select('id').eq('business_id', businessId).eq('provider', 'mercado_pago').eq('provider_account_id', accountId).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) {
+    const { error } = await db.from('payment_connections').update({ status: 'CONNECTED', credentials_encrypted: encryptSecret(JSON.stringify(credentials)), provider_account_id: accountId, last_error: null, last_sync_at: now }).eq('id', existing.id).eq('business_id', businessId);
+    if (error) throw error;
+    return existing.id;
+  }
+  const { data, error } = await db.from('payment_connections').insert({ business_id: businessId, provider: 'mercado_pago', provider_account_id: accountId, status: 'CONNECTED', credentials_encrypted: encryptSecret(JSON.stringify(credentials)), created_by: actorId, last_sync_at: now }).select('id').single();
+  if (error) throw error;
+  return data.id as string;
 }

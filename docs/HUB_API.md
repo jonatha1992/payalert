@@ -14,7 +14,7 @@ GET agrega métricas desde `hub_charges` y devuelve proveedor/estado de conexió
 
 ## Crear cobro
 
-`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; conexión ausente/inactiva produce `409 connection_unavailable`.
+`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. El servidor siempre fija el importe a `client_apps.deposit_default`; cualquier importe enviado se ignora. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. El estado y la unicidad por app+booking se guardan en `hub_charges`; una solicitud repetida para un cobro pendiente vigente devuelve el mismo `checkoutUrl`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; si `client_apps.connection_id` es `null` o la conexión está ausente/inactiva produce `409 { "error": "connection_unavailable" }` con las cabeceras CORS del Origin autorizado; no se crea un claim ni se llama a Mercado Pago. Las apps nuevas pueden registrar cobros solo después de que la dueña complete la autorización por invitación.
 
 El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
 
@@ -22,7 +22,10 @@ El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con
 
 `GET /api/v1/charges/{bookingId}` usa la misma API key y validación de `Origin`. El segmento `{bookingId}` identifica el booking dentro de la app autenticada. Responde `{ "status": "...", "amount": 5000, "expiresAt": "...", "paymentId": "..." }`; `paymentId` solo se incluye cuando hay uno registrado. Si el booking no tiene cobro para la app autenticada, devuelve `404` sin revelar si existe para otra app.
 
-## Reembolso
+## Estado de conexión
+
+`GET /api/v1/status` usa la misma API key y validación de `Origin`. Responde `{ "connected": true, "deposit_default": 5000 }` solo cuando la app tiene `connection_id` y la conexión asociada a su `business_id` tiene estado `CONNECTED`; en los demás casos `connected` es `false`. No expone identificadores de conexión, cuenta ni credenciales. `OPTIONS` implementa el preflight CORS con el mismo mecanismo de autenticación y allowlist.
+
 
 `POST /api/v1/charges/{bookingId}/refund` usa la misma API key y validación de `Origin`. El booking debe corresponder a un cobro aprobado de la app autenticada. La app puede enviar `{ "eventStartsAt": "2030-01-02T15:00:00.000Z" }`; si se incluye, PayAlert devuelve `409 refund_window_closed` cuando faltan menos de 24 horas. PayAlert no consulta Firestore ni aplica políticas de agenda propias. El reembolso usa CAS `approved -> refunding -> refunded`; el resultado ambiguo permanece `refunding` para conciliación y un rechazo definitivo del proveedor vuelve a `approved`. Responde `{ "status": "refunded" }` o `{ "status": "refunding" }`.
 
@@ -41,12 +44,28 @@ Los registros y el estado del cobro se mantienen en Supabase (`hub_charges`). El
 3. Completar `allowed_origins` con los origins exactos del gimnasio.
 4. Generar una API key aparte y guardarla como secreto en las Cloud Functions del gimnasio; almacenar solo su SHA-256 en `client_apps.api_key_hash`. No incluir valores reales ni claves en código o documentación.
 
-1. Aplicar `docs/migrations/017_client_apps_hub.sql`, `018_hub_creating_status.sql`, `019_hub_hardening.sql` y `020_hub_generic_mode.sql` con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
-2. Autorizar OAuth MP con `offline_access read write` (o `MP_OAUTH_SCOPES`).
-3. Registrar cada app mediante un proceso administrativo que genere una API key aleatoria y almacene solo su SHA-256 en `client_apps.api_key_hash`. Guardar la clave una sola vez en el sistema de secretos de esa app; no incluirla en código cliente versionado.
+1. Aplicar manualmente las migraciones Hub requeridas, incluida `022_client_apps_connection_nullable.sql`, con credenciales administrativas. Esta documentación no aplica migraciones automáticamente.
+2. Registrar primero la app con `node scripts/register-client-app.js <config.json>`. El JSON admite `{ "slug": "huellitas", "allowed_origins": ["https://huellitas.example.test"], "deposit_default": 5000, "connect_return_url": "https://huellitas.example.test/connect/return", "business_id": "...", "connection_id": "..." }`; `business_id` y `connection_id` son opcionales. Sin `business_id` se crea/reutiliza un negocio oculto `app:<slug>`; sin `connection_id`, se almacena `null`. `connect_return_url` debe ser HTTPS y su origen estar incluido exactamente en `allowed_origins`.
+3. El comando muestra la API key una sola vez; guardarla como secreto y no incluirla en código versionado. Cuando la app se registra sin conexión, también muestra el enlace de invitación.
+4. Compartir ese enlace con la dueña: ella autoriza Mercado Pago desde su propia cuenta y la conexión se asocia a la app. Recién entonces el endpoint de creación de cobro funciona; antes responde `409 { "error": "connection_unavailable" }`.
 
 En modo genérico, `client_apps.firebase_project_id` y `client_apps.firebase_sa_encrypted` son nullable y PayAlert no requiere ni usa credenciales Firebase de la app cliente.
 
+## Conexión por invitación
+
+La dueña puede delegar la autorización de Mercado Pago sin compartir su sesión de PayAlert. El orden es alta de app → enlace de invitación → la dueña autoriza Mercado Pago → creación de cobros habilitada. El alta sin conexión ya emite el enlace; para regenerarlo para una app activa, usar:
+
+```bash
+node scripts/register-client-app.js invite --slug <slug> [--hours 24]
+```
+
+El comando muestra un enlace aleatorio una sola vez y guarda solo el hash del token. El enlace vence según `--hours` (por defecto 24 h), es de un solo uso y solo funciona mientras la app esté activa. Quien lo abra autoriza la cuenta en Mercado Pago; el callback guarda la conexión y la vincula exclusivamente a esa app. Si falla el intercambio con Mercado Pago, la invitación sigue vigente y se puede reabrir para iniciar una autorización nueva.
+
+Configurar `client_apps.connect_return_url` con una URL absoluta HTTPS de la app cliente. Su origen debe coincidir exactamente con una entrada de `client_apps.allowed_origins` (por ejemplo, `https://huellitas.example.test/connect/return`). Tras el callback, PayAlert agrega `mp=connected` o `mp=failed` a esa URL. Si la URL no está permitida, el callback vuelve al dashboard de PayAlert. El enlace se debe tratar como un secreto: compartirlo solo con la persona encargada y no registrarlo en logs.
+
+El flujo completo está en [docs/connect-invite-flow.md](connect-invite-flow.md).
+
+- OAuth MP requiere MP_OAUTH_ENABLED, MP_CLIENT_ID, MP_CLIENT_SECRET, MP_OAUTH_REDIRECT_URI y MP_OAUTH_STATE_SECRET (mínimo 32 caracteres).
 ## Variables
 
 - `MP_OAUTH_SCOPES`: default `offline_access read write`; permite los scopes requeridos por preferencias y reembolsos.

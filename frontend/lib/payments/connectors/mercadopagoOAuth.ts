@@ -13,7 +13,7 @@ export const MP_STATE_TTL_SECONDS = 600;
 
 export interface OAuthStatePayload {
   tenantId: string;
-  userId: string;
+  userId: string | null;
   nonce: string;
   issuedAt: number;
 }

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server/rbac';
-import { resolveScope } from '@/lib/server/scope';
-import { localDateBoundaryUtc, localDateKey } from '@/lib/reports/dateRange';
-import {
-  assertStoreInBusiness, getServiceClient, getSessionProfile, scopeErrorResponse,
-} from '@/lib/server/session';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 interface ReportFilters {
   businessId: string;
@@ -39,20 +39,11 @@ interface GroupedData {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-
-    // El negocio y la tienda salen de la sesión; los parámetros del cliente son solo pistas.
-    const profile = requirePermission(await getSessionProfile(request), 'report', 'read');
-    const scope = resolveScope(profile, {
-      businessId: searchParams.get('businessId'),
-      storeId: searchParams.get('storeId'),
-    });
-    await assertStoreInBusiness(scope.storeId, scope.businessId);
-    const supabase = getServiceClient();
-
+    
     // Parsear filtros
     const filters: ReportFilters = {
-      businessId: scope.businessId,
-      storeId: scope.storeId ?? undefined,
+      businessId: searchParams.get('businessId') || '',
+      storeId: searchParams.get('storeId') || undefined,
       startDate: searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       endDate: searchParams.get('endDate') || new Date().toISOString().split('T')[0],
       type: (searchParams.get('type') as 'income' | 'expense' | 'all') || 'all',
@@ -81,8 +72,8 @@ export async function GET(request: NextRequest) {
         stores (name)
       `)
       .eq('business_id', filters.businessId)
-      .gte('created_at', localDateBoundaryUtc(filters.startDate))
-      .lt('created_at', localDateBoundaryUtc(filters.endDate, true))
+      .gte('created_at', `${filters.startDate}T00:00:00`)
+      .lte('created_at', `${filters.endDate}T23:59:59`)
       .order('created_at', { ascending: false });
 
     // Aplicar filtros opcionales
@@ -195,8 +186,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(report, { status: 200 });
 
   } catch (error) {
-    const denied = scopeErrorResponse(error);
-    if (denied) return denied;
     console.error('[Reports API] Error:', error);
     return NextResponse.json(
       { error: 'Error interno del servidor' },
@@ -210,7 +199,7 @@ function groupByDay(transactions: TransactionRecord[]): GroupedData[] {
   const groups = new Map<string, { income: number; expenses: number; count: number }>();
 
   transactions.forEach((t) => {
-    const date = localDateKey(t.created_at);
+    const date = t.created_at.split('T')[0];
     const existing = groups.get(date) || { income: 0, expenses: 0, count: 0 };
     
     if (t.type === 'income') {

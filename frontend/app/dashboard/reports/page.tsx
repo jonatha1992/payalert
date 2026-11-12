@@ -37,7 +37,6 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useReportMovements, type Movement } from '@/hooks/useReportMovements';
 
 // Formato de moneda
 const formatCurrency = (value: number) => {
@@ -103,12 +102,20 @@ interface ReportData {
     balance: number;
     count: number;
   }>;
-  transactions: Movement[];
+  transactions: Array<{
+    id: string;
+    type: 'income' | 'expense';
+    amount: number;
+    description: string;
+    category: string;
+    store_id: string;
+    created_at: string;
+    stores?: { name: string };
+  }>;
 }
 
 export default function ReportsPage() {
   const { profile } = useAuth();
-  const { filters: movementFilters, setFilters: setMovementFilters, searchDraft, setSearchDraft, data: movementData, loading: movementsLoading, load: loadMovements, exportCsv, exportExcel } = useReportMovements(profile?.business_id);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -179,6 +186,30 @@ export default function ReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  // Exportar a CSV
+  const exportToCSV = () => {
+    if (!reportData?.transactions) return;
+
+    const headers = ['Fecha', 'Tipo', 'Monto', 'Categoría', 'Descripción', 'Tienda'];
+    const rows = reportData.transactions.map((t) => [
+      new Date(t.created_at).toLocaleDateString('es-AR'),
+      t.type === 'income' ? 'Ingreso' : 'Gasto',
+      t.amount,
+      t.category || 'Sin categoría',
+      t.description || '',
+      t.stores?.name || 'Sin tienda',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `reporte-${filters.startDate}-${filters.endDate}.csv`;
+    link.click();
+
+    toast.success('Reporte exportado a CSV');
+  };
+
   // Preparar datos para gráfico de torta
   const pieData = reportData?.categoriesBreakdown
     ?.filter((c) => c.type === 'expense')
@@ -210,20 +241,12 @@ export default function ReportsPage() {
             <span>Actualizar</span>
           </button>
           <button
-            onClick={exportCsv}
+            onClick={exportToCSV}
             disabled={!reportData || loading}
             className="flex items-center space-x-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors"
           >
             <Download size={18} />
             <span>Exportar CSV</span>
-          </button>
-          <button
-            onClick={exportExcel}
-            disabled={!movementData || movementsLoading}
-            className="flex items-center space-x-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors"
-          >
-            <Download size={18} />
-            <span>Exportar Excel</span>
           </button>
         </div>
       </div>
@@ -243,7 +266,7 @@ export default function ReportsPage() {
 
         {showFilters && (
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               {/* Fecha inicio */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -381,7 +404,7 @@ export default function ReportsPage() {
           )}
 
           {activeTab === 'transactions' && (
-          <TransactionsTab data={{ transactions: movementData?.transactions ?? [], pagination: movementData?.pagination }} loading={movementsLoading} searchTerm={searchDraft} setSearchTerm={setSearchDraft} page={movementData?.pagination.page ?? 1} onPage={loadMovements} filters={movementFilters} setFilters={setMovementFilters} onApply={() => void loadMovements(1)} />
+            <TransactionsTab data={reportData} />
           )}
         </>
       )}
@@ -394,7 +417,7 @@ function OverviewTab({ data }: { data: ReportData }) {
   return (
     <div className="space-y-6">
       {/* Tarjetas de resumen */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard
           title="Ingresos Totales"
           value={formatCurrency(data.summary.income)}
@@ -620,27 +643,35 @@ function ChartsTab({ data, pieData }: { data: ReportData; pieData: Array<{ name:
 }
 
 // Componente de Transacciones
-function TransactionsTab({ data, loading, searchTerm, setSearchTerm, page, onPage, filters, setFilters, onApply }: { data: { transactions: Movement[]; pagination?: { total: number; totalPages: number } }; loading: boolean; searchTerm: string; setSearchTerm: (value: string) => void; page: number; onPage: (page: number) => void; filters: ReturnType<typeof useReportMovements>['filters']; setFilters: ReturnType<typeof useReportMovements>['setFilters']; onApply: () => void }) {
-  const movementFilters = filters;
-  const setMovementFilters = setFilters;
-  const loadMovements = (requestedPage: number) => { void onPage(requestedPage); };
-  const filteredTransactions = data.transactions;
+function TransactionsTab({ data }: { data: ReportData }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredTransactions = data.transactions.filter((t) =>
+    t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.stores?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-      <div className="grid grid-cols-1 gap-3 border-b p-4 md:grid-cols-3">
-        <input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        <select value={movementFilters.status ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, status: e.target.value || undefined })}><option value="">Estado</option><option value="completed">Completado</option><option value="pending">Pendiente</option><option value="failed">Fallido</option></select>
-        <select value={movementFilters.direction ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, direction: (e.target.value || undefined) as "inbound" | "outbound" | undefined })}><option value="">Dirección</option><option value="inbound">Entrante</option><option value="outbound">Saliente</option></select>
-        <input placeholder="Proveedor" value={movementFilters.provider ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, provider: e.target.value || undefined })} />
-        <input placeholder="Conexión" value={movementFilters.accountId ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, accountId: e.target.value || undefined })} />
-        <input aria-label="Monto mínimo" type="number" value={movementFilters.minAmount ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, minAmount: e.target.value ? Number(e.target.value) : undefined })} />
-        <input aria-label="Monto máximo" type="number" value={movementFilters.maxAmount ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, maxAmount: e.target.value ? Number(e.target.value) : undefined })} />
-        <input placeholder="Moneda" value={movementFilters.currency ?? ""} onChange={(e) => setMovementFilters({ ...movementFilters, currency: e.target.value || undefined })} />
-        <input aria-label="Desde" type="date" value={movementFilters.startDate} onChange={(e) => setMovementFilters({ ...movementFilters, startDate: e.target.value })} />
-        <input aria-label="Hasta" type="date" value={movementFilters.endDate} onChange={(e) => setMovementFilters({ ...movementFilters, endDate: e.target.value })} />
-        <button type="button" onClick={() => void loadMovements(1)}>Aplicar filtros</button><span>{data.pagination?.total ?? 0} resultados</span>
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Buscar transacciones..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+            />
+          </div>
+          <span className="text-sm text-gray-500">
+            {filteredTransactions.length} de {data.transactions.length} transacciones
+          </span>
+        </div>
       </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-900">
@@ -707,9 +738,10 @@ function TransactionsTab({ data, loading, searchTerm, setSearchTerm, page, onPag
       </div>
 
       {filteredTransactions.length === 0 && (
-        <div className="p-8 text-center text-gray-500">No se encontraron transacciones</div>
+        <div className="p-8 text-center text-gray-500">
+          No se encontraron transacciones
+        </div>
       )}
-      <div className="flex justify-between p-4"><button disabled={loading || page <= 1} onClick={() => void onPage(page - 1)}>Anterior</button><span>Página {page} de {data.pagination?.totalPages ?? 0}</span><button disabled={loading || page >= (data.pagination?.totalPages ?? 0)} onClick={() => void onPage(page + 1)}>Siguiente</button></div>
     </div>
   );
 }

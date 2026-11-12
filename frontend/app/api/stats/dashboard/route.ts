@@ -1,28 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server/rbac';
-import { resolveScope } from '@/lib/server/scope';
-import {
-  assertStoreInBusiness,
-  getServiceClient,
-  getSessionProfile,
-  scopeErrorResponse,
-} from '@/lib/server/session';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(request: NextRequest) {
   try {
     // Obtener parámetros de query
     const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
+    const storeId = searchParams.get('storeId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    // El negocio y la tienda salen de la sesión; los parámetros del cliente son solo pistas.
-    const profile = requirePermission(await getSessionProfile(request), 'report', 'read');
-    const { businessId, storeId } = resolveScope(profile, {
-      businessId: searchParams.get('businessId'),
-      storeId: searchParams.get('storeId'),
-    });
-    await assertStoreInBusiness(storeId, businessId);
-    const supabase = getServiceClient();
+    if (!businessId) {
+      return NextResponse.json(
+        { error: 'businessId es requerido' },
+        { status: 400 }
+      );
+    }
 
     // Fechas por defecto: hoy
     const today = new Date().toISOString().split('T')[0];
@@ -172,8 +170,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats, { status: 200 });
 
   } catch (error) {
-    const denied = scopeErrorResponse(error);
-    if (denied) return denied;
     console.error('[Stats API] Error:', error);
     return NextResponse.json(
       { error: 'Error interno del servidor' },

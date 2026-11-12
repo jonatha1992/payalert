@@ -1,43 +1,41 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Store, Bell } from 'lucide-react';
+import { Settings, X, Store, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/components/AuthProvider';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
 import PushNotificationSettings from '@/components/PushNotificationSettings';
-import { useFormValidation } from '@/hooks/useFormValidation';
-import { validationSchemas } from '@/lib/validation';
-import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
-import { FormField } from '@/components/FormField';
-
-interface NotificationPreferences {
-  pushEnabled: boolean;
-  soundEnabled: boolean;
-  emailEnabled: boolean;
-}
 
 export default function DashboardSettingsPage() {
     const { profile } = useAuth();
     const [isEditBusinessOpen, setIsEditBusinessOpen] = useState(false);
-    const businessForm = useFormValidation(validationSchemas.settings, { name: '' });
-    const { values, change, errorFor, submit, isValid, submitting } = businessForm;
-    const { preferences: prefs, loading: prefsLoading, update: updatePreference } = useNotificationPreferences(profile?.business_id);
+    const [businessName, setBusinessName] = useState('');
+    const [loading, setLoading] = useState(false);
+    
+    // Notification Settings
+    const [notifications, setNotifications] = useState({
+        sound: true,
+        toast: true,
+        email: false
+    });
 
     const handleOpenEditBusiness = async () => {
         if (!profile?.business_id) return;
         setIsEditBusinessOpen(true);
+        // Fetch current name
         const { data } = await supabase.from('businesses').select('name').eq('id', profile.business_id).single();
-        if (data) change('name', data.name);
+        if (data) setBusinessName(data.name);
     };
 
     const handleSaveBusiness = async (e: React.FormEvent) => {
-        await submit(e, async (normalized) => {
+        e.preventDefault();
+        setLoading(true);
         try {
             const { error } = await supabase
                 .from('businesses')
-                .update({ name: normalized.name })
+                .update({ name: businessName })
                 .eq('id', profile?.business_id);
             
             if (error) throw error;
@@ -46,19 +44,17 @@ export default function DashboardSettingsPage() {
         } catch (error) {
             console.error(error);
             toast.error('Error al actualizar');
+        } finally {
+            setLoading(false);
         }
-        });
     };
 
-    const toggleNotification = async (key: keyof NotificationPreferences) => {
-        if (key === 'emailEnabled') return;
-        try {
-            await updatePreference(key, !prefs[key]);
-            toast.info(`Notificación ${key} ${!prefs[key] ? 'activada' : 'desactivada'}`);
-        } catch (error) {
-            console.error('Error saving notification preference:', error);
-            toast.error('Error al guardar preferencia');
-        }
+    const toggleNotification = (key: keyof typeof notifications) => {
+        setNotifications(prev => {
+            const newState = { ...prev, [key]: !prev[key] };
+            toast.info(`Notificación ${key} ${newState[key] ? 'activada' : 'desactivada'}`);
+            return newState;
+        });
     };
 
     return (
@@ -93,40 +89,24 @@ export default function DashboardSettingsPage() {
                     <PushNotificationSettings />
                     
                     <div className="mt-6 space-y-4 max-w-md">
-                        {prefsLoading ? (
-                            <div className="text-center py-4 text-sm text-gray-500">Cargando preferencias...</div>
-                        ) : (
-                            <>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alertas Visuales (Toast)</label>
-                                    <button 
-                                        onClick={() => toggleNotification('pushEnabled')}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.pushEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                                    >
-                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.pushEnabled ? 'translate-x-6' : ''}`} />
-                                    </button>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sonido de Notificación</label>
-                                    <button 
-                                        onClick={() => toggleNotification('soundEnabled')}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${prefs.soundEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                                    >
-                                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${prefs.soundEnabled ? 'translate-x-6' : ''}`} />
-                                    </button>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notificaciones por Email</label>
-                                        <p className="text-xs text-gray-500">Próximamente</p>
-                                    </div>
-                                    <button type="button" disabled aria-label="Notificaciones por Email, próximamente"
-                                        className="w-12 h-6 rounded-full bg-gray-200 dark:bg-gray-700 opacity-60 cursor-not-allowed">
-                                        <span className="block ml-1 w-4 h-4 rounded-full bg-white" />
-                                    </button>
-                                </div>
-                            </>
-                        )}
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alertas Visuales (Toast)</label>
+                            <button 
+                                onClick={() => toggleNotification('toast')}
+                                className={`w-12 h-6 rounded-full transition-colors relative ${notifications.toast ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                            >
+                                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${notifications.toast ? 'translate-x-6' : ''}`} />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Sonido de Notificación</label>
+                             <button 
+                                onClick={() => toggleNotification('sound')}
+                                className={`w-12 h-6 rounded-full transition-colors relative ${notifications.sound ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                            >
+                                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${notifications.sound ? 'translate-x-6' : ''}`} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -145,14 +125,23 @@ export default function DashboardSettingsPage() {
                         <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Editar Negocio</h2>
                         
                         <form onSubmit={handleSaveBusiness} className="space-y-4">
-                            <FormField label="Nombre del Negocio" name="business-name" value={values.name} onChange={value => change('name', value)} onBlur={() => businessForm.blur('name')} error={errorFor('name')} maxLength={160} required />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del Negocio</label>
+                                <input 
+                                    required
+                                    type="text" 
+                                    className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={businessName}
+                                    onChange={e => setBusinessName(e.target.value)}
+                                />
+                            </div>
 
                             <button 
                                 type="submit"
-                                disabled={!isValid || submitting}
+                                disabled={loading}
                                 className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                             >
-                                {submitting ? <Spinner size="sm" className="text-white" /> : 'Guardar Cambios'}
+                                {loading ? <Spinner size="sm" className="text-white" /> : 'Guardar Cambios'}
                             </button>
                         </form>
                     </div>

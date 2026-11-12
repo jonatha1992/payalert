@@ -1,5 +1,6 @@
 'use client';
 
+<<<<<<< HEAD
 import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useSearchParams } from 'next/navigation';
@@ -16,17 +17,20 @@ const loginErrors: Record<string, string> = {
 };
 const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const useGoogleIdentity = shouldUseGoogleIdentity(googleClientId);
+=======
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { Loader2, Mail, Lock } from 'lucide-react';
+>>>>>>> origin/dev
 
 export default function LoginPage() {
-    return <Suspense fallback={<div className="min-h-screen bg-gray-100 dark:bg-gray-900" />}><LoginForm /></Suspense>;
-}
-
-function LoginForm() {
-    const searchParams = useSearchParams();
-    const loginForm = useFormValidation(validationSchemas.login, { email: '', password: '' });
-    const { values, change, errorFor, submit, isValid, submitting } = loginForm;
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+<<<<<<< HEAD
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [gisReady, setGisReady] = useState(false);
     const [gisFailed, setGisFailed] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -74,16 +78,20 @@ function LoginForm() {
         void initialize().catch(handleGoogleFailure);
         return () => { active = false; };
     }, [completeGoogleLogin, gisReady, handleGoogleFailure]);
+=======
+    const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
+>>>>>>> origin/dev
 
     const handleLogin = async (e: React.FormEvent) => {
-        await submit(e, async (normalized) => {
+        e.preventDefault();
         setLoading(true);
         setError(null);
 
         try {
             const { error } = await supabase.auth.signInWithPassword({
-                email: normalized.email,
-                password: normalized.password,
+                email,
+                password,
             });
 
             if (error) throw error;
@@ -100,11 +108,12 @@ function LoginForm() {
             } else {
                 window.location.href = '/dashboard';
             }
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'No pudimos iniciar sesión. Revisá tus datos e intentá de nuevo.');
+        } catch (err: any) {
+            setError(err.message);
         } finally {
             setLoading(false);
         }
+<<<<<<< HEAD
         });
     };
 
@@ -120,6 +129,8 @@ function LoginForm() {
         } catch {
             handleGoogleFailure();
         }
+=======
+>>>>>>> origin/dev
     };
     const showOAuthFallback = !useGoogleIdentity || gisFailed;
 
@@ -131,10 +142,8 @@ function LoginForm() {
                     <div className="p-8">
                     <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-2">Bienvenido</h2>
                     <p className="text-center text-gray-500 dark:text-gray-400 mb-8">Inicia sesión para gestionar tu negocio</p>
-                    {loginErrors[searchParams.get('error') ?? ''] && (
-                        <div role="alert" className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{loginErrors[searchParams.get('error') ?? '']}</div>
-                    )}
 
+<<<<<<< HEAD
                     {useGoogleIdentity && !gisFailed && <div ref={googleButtonRef} aria-busy={googleLoading} className="w-full min-h-11 flex justify-center overflow-hidden" />}
                     {showOAuthFallback && <button
                         type="button"
@@ -159,23 +168,61 @@ function LoginForm() {
                         <span>o</span>
                         <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                     </div>
+=======
+>>>>>>> origin/dev
                     <form onSubmit={handleLogin} className="space-y-6">
-                        <FormField label="Correo Electrónico" name="email" type="email" autoComplete="email" value={values.email} onChange={value => change('email', value)} onBlur={() => loginForm.blur('email')} error={errorFor('email')} placeholder="usuario@ejemplo.com" required icon={<Mail className="h-5 w-5" />} />
+                        <div>
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Mail className="h-5 w-5 text-gray-400" />
+                                </div>
+                                <input
+                                    id="email"
+                                    name="email"
+                                    type="email"
+                                    autoComplete="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                    placeholder="usuario@ejemplo.com"
+                                    required
+                                />
+                            </div>
+                        </div>
 
-                        <FormField label="Contraseña" name="password" type="password" autoComplete="current-password" value={values.password} onChange={value => change('password', value)} onBlur={() => loginForm.blur('password')} error={errorFor('password')} placeholder="••••••••" required icon={<Lock className="h-5 w-5" />} />
+                        <div>
+                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contraseña</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Lock className="h-5 w-5 text-gray-400" />
+                                </div>
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    autoComplete="current-password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
+                        </div>
 
                         {error && (
-                            <div role="alert" className="bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-start">
+                            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-start">
                                 <span className="font-medium mr-1">Error:</span> {error}
                             </div>
                         )}
 
                         <button
                             type="submit"
-                            disabled={!isValid || submitting || loading || googleLoading}
+                            disabled={loading}
                             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {loading || googleLoading ? (
+                            {loading ? (
                                 <Loader2 className="animate-spin h-5 w-5" />
                             ) : (
                                 'Ingresar'

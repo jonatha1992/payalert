@@ -52,6 +52,23 @@ describe('fast webhook acknowledgement', () => {
     expect(mocks.sendPushToBusiness).not.toHaveBeenCalled();
   });
 
+  it('processes normal and hub payments through the same webhook pipeline', async () => {
+    const { processWebhook } = await import('@/lib/server/webhookHandler');
+    const { ingestWebhook } = await import('@/lib/payments/ingest');
+    const { applyHubPayment } = await import('@/lib/server/hubWebhook');
+    const result = { notify: false, notification: null, transactionId: null };
+    vi.mocked(ingestWebhook).mockResolvedValue(result as never);
+    mocks.findConnectionByProviderAccount.mockResolvedValue(connection);
+    mocks.fetchTransaction.mockResolvedValue({ externalReference: 'hub-ref', externalId: 'payment-2', amount: 100, currency: 'ARS', status: 'CONFIRMED' });
+
+    const webhook = { headers: {}, query: {}, rawBody: JSON.stringify({ user_id: 'acct', data: { id: 'payment-2' } }) };
+    await processWebhook('mercado_pago', webhook);
+
+    expect(ingestWebhook).toHaveBeenCalledWith(expect.objectContaining({ provider: 'mercado_pago', request: webhook }));
+    expect(mocks.fetchTransaction).toHaveBeenCalledWith(connection, 'payment-2');
+    expect(applyHubPayment).toHaveBeenCalledWith(expect.objectContaining({ externalReference: 'hub-ref', externalId: 'payment-2' }), expect.anything());
+  });
+
   it('does not enqueue invalid signatures', async () => {
     const response = await handleProviderWebhook('mercado_pago', request({ user_id: 'acct', data: { id: 'payment-1' }, signatureValid: false }));
     expect(response.status).toBe(401);
