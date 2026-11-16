@@ -22,6 +22,8 @@ services:
       - traefik.http.routers.payalert.entrypoints=web
       - traefik.http.routers.payalert.rule=Host(`payalert.tecnofusion.dev`)
       - traefik.http.services.payalert.loadbalancer.server.port=3000
+    ports:
+      - 127.0.0.1:3935:3000
     networks:
       - default
       - edge
