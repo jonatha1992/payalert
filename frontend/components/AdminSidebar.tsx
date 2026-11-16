@@ -54,10 +54,8 @@ export default function AdminSidebar() {
             </nav>
 
             <div className="mt-auto border-t border-slate-900 pt-4 pb-2">
-                <div className="sidebar-user px-3 py-2 mb-3 bg-slate-900/50 rounded-xl border border-slate-800/50">
-                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Administrador</p>
-                    <p className="text-sm font-bold text-slate-200 truncate">{profile?.first_name || 'Admin'} {profile?.last_name || ''}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{profile?.role === 'admin' ? 'Acceso Total' : 'Restringido'}</p>
+                <div className="sidebar-user px-3 py-2 mb-3 min-w-0">
+                    <p title={profile?.email || undefined} className="sidebar-label text-xs text-slate-400 truncate">{profile?.email || ''}</p>
                 </div>
                 <button
                     onClick={() => signOut()}

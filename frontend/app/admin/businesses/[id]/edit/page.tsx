@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { FormField } from '@/components/FormField';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import { validationSchemas } from '@/lib/validation';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 
 export default function EditBusinessPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -32,7 +34,7 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
                     change('name', data.name);
                 }
             } catch (err: any) {
-                setError("Error al cargar el negocio: " + err.message);
+                setError(friendlyErrorMessage(err, 'No pudimos cargar el negocio.'));
             } finally {
                 setLoading(false);
             }
@@ -53,9 +55,11 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
 
                 if (error) throw error;
 
+                toast.success('Cambios guardados');
                 router.push('/admin/businesses');
             } catch (err: any) {
-                setError(err.message);
+                setError(friendlyErrorMessage(err));
+                toast.error(friendlyErrorMessage(err));
             } finally {
                 setSaving(false);
             }
@@ -97,7 +101,7 @@ export default function EditBusinessPage({ params }: { params: Promise<{ id: str
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {saving && <Loader2 className="animate-spin" size={18} />}
-                            <span>Guardar Cambios</span>
+                            <span>{saving || submitting ? 'Guardando…' : 'Guardar Cambios'}</span>
                         </button>
                     </div>
                 </form>

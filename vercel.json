@@ -1,5 +1,13 @@
 {
   "crons": [
     { "path": "/api/internal/webhook-worker", "schedule": "0 9 * * *" }
+  ],
+  "redirects": [
+    {
+      "source": "/((?!api/).*)",
+      "has": [{ "type": "host", "value": "payalert-kappa.vercel.app" }],
+      "destination": "https://payalert.tecnofusion.dev/$1",
+      "permanent": true
+    }
   ]
 }

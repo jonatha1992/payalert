@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
-
+import AppVersion from "@/components/AppVersion";
+import { Toaster } from "sonner";
+import { QueryProvider } from "@/components/QueryProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,9 +35,6 @@ export const metadata: Metadata = {
   },
 };
 
-import { Toaster } from 'sonner';
-import { QueryProvider } from "@/components/QueryProvider";
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -43,12 +42,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <QueryProvider>
           <AuthProvider>
-            {children}
+            <main className="flex-1">{children}</main>
+            <footer className="w-full px-3 py-2">
+              <AppVersion />
+            </footer>
             <Toaster richColors position="top-right" />
           </AuthProvider>
         </QueryProvider>

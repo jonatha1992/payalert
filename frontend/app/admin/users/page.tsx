@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 import { ChevronDown, Loader2, RefreshCw, Shield, User, X } from 'lucide-react';
 
 type UserRow = {
@@ -47,7 +49,9 @@ export default function UsersPage() {
       if (!o.ok) throw new Error(od.error || 'No pudimos cargar los negocios.');
       setUsers(ud.users ?? []); setStores(od.stores ?? []); setBusinesses(od.businesses ?? []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No pudimos cargar los usuarios.');
+      const message = friendlyErrorMessage(cause, 'No pudimos cargar los usuarios.');
+      setError(message);
+      toast.error(message);
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -86,8 +90,11 @@ export default function UsersPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'No pudimos guardar el cambio.');
       setEditing(null); await load();
+      toast.success('Rol actualizado');
     } catch (cause) {
-      setFormError(cause instanceof Error ? cause.message : 'No pudimos guardar el cambio.');
+      const message = friendlyErrorMessage(cause, 'No se pudo actualizar el rol. Revisá tu conexión e intentá de nuevo.');
+      setFormError(message);
+      toast.error(message);
     } finally { setSaving(false); }
   }
 
@@ -211,7 +218,7 @@ export default function UsersPage() {
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-600 dark:text-gray-200">Cancelar</button>
               <button type="submit" disabled={!valid || saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />} Guardar
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />} {saving ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
           </form>

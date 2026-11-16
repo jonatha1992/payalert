@@ -8,6 +8,12 @@
 
 ## Paso 1: Configurar Variables de Entorno en Vercel
 
+Para deploys manuales desde una copia sin `.git`, fija la versión del build explícitamente:
+
+```bash
+vercel deploy --prod --build-env NEXT_PUBLIC_APP_VERSION=$(git rev-parse --short HEAD)
+```
+
 En el dashboard de Vercel, ve a tu proyecto → Settings → Environment Variables:
 
 ### Variables Obligatorias

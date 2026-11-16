@@ -4,7 +4,7 @@ import type { NormalizedTransaction } from '@/lib/payments/types';
 import type { ClientApp } from '@/lib/server/clientApps';
 import { transitionCharge, hubChargeTransitions, type HubCharge } from '@/lib/server/hubCharges';
 
-type HubPayment = Pick<NormalizedTransaction, 'externalReference' | 'externalId' | 'amount' | 'currency' | 'status'>;
+type HubPayment = Pick<NormalizedTransaction, 'externalReference' | 'externalId' | 'amount' | 'currency' | 'status'> & { occurredAt?: string };
 type ChargeRow = HubCharge & { client_apps: ClientApp };
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -26,7 +26,7 @@ export async function applyHubPayment(payment: HubPayment, db: Db): Promise<void
 
   const approved = payment.status === 'CONFIRMED';
   if (!approved && charge.status !== 'pending') return;
-  const expired = charge.status === 'expired' || Date.parse(charge.expires_at) <= Date.now();
+  const expired = charge.status === 'expired' || Date.parse(charge.expires_at) <= (payment.occurredAt && !Number.isNaN(Date.parse(payment.occurredAt)) ? Date.parse(payment.occurredAt) : Date.now());
   const nextStatus: HubCharge['status'] = approved ? (expired ? 'needs_refund' : 'approved') : 'rejected';
   if (!hubChargeTransitions[charge.status].includes(nextStatus)) return;
   const changed = await transitionCharge(charge.id, charge.status, nextStatus, { payment_id: payment.externalId, last_error: null });

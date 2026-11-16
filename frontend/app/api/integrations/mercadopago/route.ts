@@ -278,8 +278,9 @@ async function handleInviteCallback(request: NextRequest, code: string, state: s
     const tokens = await exchangeAuthorizationCode(code, config);
     const accountId = await resolveAccountId(tokens);
     const connectionId = await saveConnection(db, row.business_id, accountId, tokens, null, now);
-    const { error: linkError } = await db.from('client_apps').update({ connection_id: connectionId }).eq('id', app.id).eq('business_id', row.business_id).eq('active', true);
+    const { data: linkedApp, error: linkError } = await db.from('client_apps').update({ connection_id: connectionId }).eq('id', app.id).eq('business_id', row.business_id).eq('active', true).is('connection_id', null).select('id').maybeSingle();
     if (linkError) throw linkError;
+    if (!linkedApp) throw new Error('Client app already has a payment connection');
     const { data: used, error: useError } = await db.from('connect_invites').update({ used_at: now }).eq('id', row.invite_id).eq('client_app_id', app.id).is('used_at', null).gt('expires_at', now).select('id').maybeSingle();
     if (useError) throw useError;
     if (!used) throw new Error('Invitation already consumed');

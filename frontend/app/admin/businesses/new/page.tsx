@@ -8,6 +8,8 @@ import { useFormValidation } from '@/hooks/useFormValidation';
 import { validationSchemas } from '@/lib/validation';
 import { FormField } from '@/components/FormField';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 
 export default function NewBusinessPage() {
     const businessForm = useFormValidation(validationSchemas.newBusiness, { name: '', mpAccessToken: '', mpPublicKey: '', ualaClientId: '', ualaClientSecret: '' });
@@ -43,9 +45,11 @@ export default function NewBusinessPage() {
 
             if (error) throw error;
 
+            toast.success('Negocio creado');
             router.push('/admin/businesses');
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'No se pudo crear el negocio. Revisá los datos e intentá de nuevo.');
+            setError(friendlyErrorMessage(err, 'No se pudo crear el negocio. Revisá los datos e intentá de nuevo.'));
+            toast.error(friendlyErrorMessage(err, 'No se pudo crear el negocio. Revisá los datos e intentá de nuevo.'));
         }
         });
     };
@@ -149,7 +153,7 @@ export default function NewBusinessPage() {
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {submitting && <Loader2 className="animate-spin" size={18} />}
-                            <span>Crear Negocio</span>
+                            <span>{submitting ? 'Guardando…' : 'Crear Negocio'}</span>
                         </button>
                     </div>
                 </form>

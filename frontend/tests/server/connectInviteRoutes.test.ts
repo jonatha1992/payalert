@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const { getServiceClient, getSessionProfile, from, exchangeAuthorizationCode, recordAuditEvent } = vi.hoisted(() => ({
   getServiceClient: vi.fn(), getSessionProfile: vi.fn(), from: vi.fn(), exchangeAuthorizationCode: vi.fn(), recordAuditEvent: vi.fn(),
 }));
+vi.mock('@/lib/security/rateLimiter', () => ({ authRateLimiter: { check: async () => ({ allowed: true, remaining: 100, retryAfter: 0 }) } }));
 vi.mock('@/lib/server/session', () => ({ getServiceClient, getSessionProfile, scopeErrorResponse: () => null }));
 vi.mock('@/lib/payments/connectors/mercadopagoOAuth', async (orig) => ({ ...(await orig<typeof import('@/lib/payments/connectors/mercadopagoOAuth')>()), exchangeAuthorizationCode }));
 vi.mock('@/lib/server/audit', () => ({ recordAuditEvent }));
@@ -36,6 +37,7 @@ function makeDb() {
         if (table === 'mp_oauth_states' && !target.values) return { data: stateRow, error: null };
         if (table === 'mp_oauth_states' && target.values) { updates.push({ table, values: target.values, filters: target.filters }); return { data: { state_hash: 'digest' }, error: null }; }
         if (table === 'payment_connections' && !target.values) return { data: accountExists ? { id: 'conn-1' } : null, error: null };
+        if (table === 'client_apps' && target.values) { updates.push({ table, values: target.values, filters: target.filters }); return { data: { id: 'app-1' }, error: null }; }
         if (table === 'connect_invites' && target.values) { updates.push({ table, values: target.values, filters: target.filters }); return { data: { id: 'invite-1' }, error: null }; }
         return { data: null, error: null };
       };

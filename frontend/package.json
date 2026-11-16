@@ -8,8 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/write-version.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -30,7 +29,8 @@
     "tailwind-merge": "^3.4.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
-    "firebase-admin": "^13.0.2"
+    "firebase-admin": "^13.0.2",
+    "jose": "^4.15.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

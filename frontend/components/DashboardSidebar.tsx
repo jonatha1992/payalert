@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Store, CreditCard, Users, Settings, LogOut, FileText, DollarSign, Package } from 'lucide-react';
+import { LayoutDashboard, Store, CreditCard, Users, Settings, LogOut, FileText, DollarSign } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 export default function DashboardSidebar() {
@@ -14,7 +14,6 @@ export default function DashboardSidebar() {
         { name: 'Mis Sucursales', href: '/dashboard/stores', icon: Store },
         { name: 'Reportes', href: '/dashboard/reports', icon: FileText },
         { name: 'Integraciones', href: '/dashboard/integrations', icon: CreditCard },
-        { name: 'Apps', href: '/dashboard/apps', icon: Package },
         { name: 'Gastos', href: '/dashboard/expenses', icon: DollarSign },
         { name: 'Empleados', href: '/dashboard/employees', icon: Users },
         { name: 'Configuración', href: '/dashboard/settings', icon: Settings },
@@ -59,9 +58,8 @@ export default function DashboardSidebar() {
             </nav>
 
             <div className="mt-auto border-t border-gray-800 pt-4">
-                <div className="px-4 py-3 mb-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
-                    <p className="text-xs text-gray-500">Sesión como</p>
-                    <p className="text-sm font-medium text-gray-200 truncate">{profile?.first_name} {profile?.last_name}</p>
+                <div className="px-4 py-2 mb-3 min-w-0">
+                    <p title={profile?.email || undefined} className="text-xs text-gray-400 truncate">{profile?.email || ''}</p>
                 </div>
                 <button
                     onClick={() => signOut()}

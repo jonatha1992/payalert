@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { Plus, Pencil, Trash2, Loader2, RefreshCw } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/ui/errorMessage';
 
 interface Business {
     id: string;
@@ -17,7 +18,7 @@ export default function BusinessesPage() {
     const [businesses, setBusinesses] = useState<Business[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const router = useRouter();
+    const [deleting, setDeleting] = useState(false);
 
     const fetchBusinesses = async () => {
         setLoading(true);
@@ -33,7 +34,8 @@ export default function BusinessesPage() {
             const filteredData = (data || []).filter(b => b.name !== 'PayAlert');
             setBusinesses(filteredData);
         } catch (err: any) {
-            setError(err.message);
+            setError(friendlyErrorMessage(err, 'No pudimos cargar los negocios.'));
+            toast.error(friendlyErrorMessage(err, 'No pudimos cargar los negocios.'));
         } finally {
             setLoading(false);
         }
@@ -46,12 +48,16 @@ export default function BusinessesPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('¿Estás seguro de que deseas eliminar este negocio?')) return;
 
+        setDeleting(true);
         try {
             const { error } = await supabase.from('businesses').delete().eq('id', id);
             if (error) throw error;
             setBusinesses(businesses.filter((b) => b.id !== id));
-        } catch (err: any) {
-            alert('Error al eliminar el negocio: ' + err.message);
+            toast.success('Negocio eliminado');
+        } catch (err: unknown) {
+            toast.error(friendlyErrorMessage(err, 'No se pudo eliminar el negocio.'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -74,7 +80,7 @@ export default function BusinessesPage() {
                 </div>
             ) : error ? (
                 <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center justify-between">
-                    <span>Error: {error}</span>
+                    <span>{error}</span>
                     <button onClick={fetchBusinesses} className="flex items-center space-x-1 hover:underline"><RefreshCw size={16} /> <span>Reintentar</span></button>
                 </div>
             ) : businesses.length === 0 ? (
@@ -119,6 +125,7 @@ export default function BusinessesPage() {
                                         </Link>
                                         <button
                                             onClick={() => handleDelete(business.id)}
+                                            disabled={deleting}
                                             className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-block"
                                         >
                                             <Trash2 size={18} />

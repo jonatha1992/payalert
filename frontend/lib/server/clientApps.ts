@@ -4,10 +4,12 @@ import { getServiceClient } from '@/lib/server/session';
 export type ClientApp = {
   id: string; slug: string; business_id: string; connection_id: string | null;
   allowed_origins: string[];
+  firebase_project_id?: string | null;
+  owner_emails?: string[];
   api_key_hash: string; active: boolean;
   deposit_default: number;
-  item_title: string | null;
   connect_return_url: string | null;
+  item_title: string | null;
 };
 
 export async function loadClientApp(slug: string): Promise<ClientApp | null> {
