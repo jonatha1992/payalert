@@ -6,6 +6,7 @@
 - Contenedores: `payalert-app` (Traefik router `payalert`, Host `payalert.tecnofusion.dev`, puerto 3000, loopback 127.0.0.1:3935) y `payalert-cron` (alpine, 09:00 UTC llama `/api/internal/webhook-worker` con `CRON_SECRET`; reemplaza el cron de `vercel.json`).
 - Env de prod: `D:/Repositorio/home-server/deployer/envs/.env.payalert` en el server (gitignored; el deployer lo copia a `deploy/.env.prod`). No versionar.
 - `NEXT_PUBLIC_*` entran como build args; `output: standalone` solo con `DOCKER_BUILD=1` (Dockerfile) para no afectar Vercel.
+- Correos transaccionales: cliente `frontend/lib/server/correoCentral.ts` contra `correo-central` (`CORREO_CENTRAL_URL`, `CORREO_CENTRAL_KEY`), cableado en `processWebhook` (`emailNotifications.ts`) para usuarios con `email_enabled=true` sin bloquear el ACK de webhooks.
 
 ## Pendientes
 - `MP_OAUTH_REDIRECT_URI` sigue apuntando a `payalert-kappa.vercel.app`; migrar la URL registrada en Mercado Pago y el webhook antes de apagar Vercel.

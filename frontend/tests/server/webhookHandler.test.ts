@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(), findConnectionByProviderAccount: vi.fn(), findConnectionByOrder: vi.fn(), findConnectionById: vi.fn(),
-  fetchTransaction: vi.fn(), sendPushToBusiness: vi.fn(),
+  fetchTransaction: vi.fn(), sendPushToBusiness: vi.fn(), sendPaymentEmailToBusiness: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/server/hubWebhook', () => ({ applyHubPayment: vi.fn() }));
@@ -24,6 +24,7 @@ vi.mock('@/lib/payments/connectors', () => ({ getConnector: vi.fn(() => ({
 })) }));
 vi.mock('@/lib/payments/ingest', () => ({ ingestWebhook: vi.fn() }));
 vi.mock('@/lib/server/push', () => ({ sendPushToBusiness: mocks.sendPushToBusiness }));
+vi.mock('@/lib/server/emailNotifications', () => ({ sendPaymentEmailToBusiness: mocks.sendPaymentEmailToBusiness }));
 
 import { handleProviderWebhook } from '@/lib/server/webhookHandler';
 
@@ -50,6 +51,7 @@ describe('fast webhook acknowledgement', () => {
     expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({ provider: 'mercado_pago', connection_id: 'connection-1', dedupe_key: 'payment-1' }));
     expect(mocks.fetchTransaction).not.toHaveBeenCalled();
     expect(mocks.sendPushToBusiness).not.toHaveBeenCalled();
+    expect(mocks.sendPaymentEmailToBusiness).not.toHaveBeenCalled();
   });
 
   it('processes normal and hub payments through the same webhook pipeline', async () => {
@@ -87,5 +89,31 @@ describe('fast webhook acknowledgement', () => {
     expect(response.status).toBe(200);
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
     expect(mocks.fetchTransaction).not.toHaveBeenCalled();
+  });
+
+  it('dispatches push and email notifications in processWebhook without failing if email throws', async () => {
+    const { processWebhook } = await import('@/lib/server/webhookHandler');
+    const { ingestWebhook } = await import('@/lib/payments/ingest');
+    const { getServiceClient } = await import('@/lib/server/session');
+    vi.mocked(getServiceClient).mockReturnValue({
+      from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { business_id: 'biz-1' }, error: null }) }) }) }),
+    } as never);
+    vi.mocked(ingestWebhook).mockResolvedValue({
+      notify: true,
+      transactionId: 'tx-99',
+      notification: { amount: 2500, currency: 'ARS', provider: 'uala', occurredAt: '2026-11-23T12:00:00.000Z', storeId: 'store-1' },
+    } as never);
+    mocks.sendPaymentEmailToBusiness.mockRejectedValueOnce(new Error('smtp down'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await processWebhook('uala', { headers: {}, query: {}, rawBody: '{}' });
+
+    expect(res.transactionId).toBe('tx-99');
+    expect(mocks.sendPushToBusiness).toHaveBeenCalledTimes(1);
+    expect(mocks.sendPaymentEmailToBusiness).toHaveBeenCalledWith(
+      { businessId: 'biz-1', storeId: 'store-1' },
+      { transactionId: 'tx-99', amount: 2500, currency: 'ARS', provider: 'uala', occurredAt: '2026-11-23T12:00:00.000Z' },
+    );
+    errorSpy.mockRestore();
   });
 });

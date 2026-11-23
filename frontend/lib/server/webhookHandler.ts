@@ -4,6 +4,7 @@ import { getConnector } from '@/lib/payments/connectors';
 import { ingestWebhook, type IngestResult } from '@/lib/payments/ingest';
 import type { PaymentConnector, Provider, WebhookRequest } from '@/lib/payments/types';
 import { sendPushToBusiness } from '@/lib/server/push';
+import { sendPaymentEmailToBusiness } from '@/lib/server/emailNotifications';
 import { SupabasePaymentsRepository } from '@/lib/server/paymentsRepository';
 import { WebhookQueue } from '@/lib/server/webhookQueue';
 import { getServiceClient } from '@/lib/server/session';
@@ -59,6 +60,20 @@ export async function processWebhook(
         });
       } catch {
         console.error(JSON.stringify({ event: 'webhook_push_failed', provider }));
+      }
+      try {
+        await sendPaymentEmailToBusiness(
+          { businessId: data.business_id, storeId: n.storeId },
+          {
+            transactionId: result.transactionId,
+            amount: n.amount,
+            currency: n.currency,
+            provider: n.provider,
+            occurredAt: n.occurredAt,
+          },
+        );
+      } catch {
+        console.error(JSON.stringify({ event: 'webhook_email_failed', provider }));
       }
     }
   }
