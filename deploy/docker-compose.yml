@@ -38,7 +38,7 @@ services:
       TZ: UTC
     volumes:
       - ./webhook-cron.sh:/usr/local/bin/webhook-cron.sh:ro
-    command: ["sh", "-c", "echo '0 9 * * * sh /usr/local/bin/webhook-cron.sh' | crontab - && exec crond -f -l 8"]
+    command: ["sh", "-c", "echo '* * * * * sh /usr/local/bin/webhook-cron.sh' | crontab - && exec crond -f -l 8"]
 networks:
   edge:
     external: true
