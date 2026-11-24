@@ -22,9 +22,34 @@ Huellitas puede invocar las rutas `/api/v1/browser/connect-link` y `/api/v1/brow
 
 ## Cobros desde navegador (Firebase)\n\n`GET /api/v1/browser/config?app=<slug>` devuelve `{ "deposit": 5000, "connected": true }`. `POST /api/v1/browser/charges` recibe `{ "app": "<slug>", "bookingId": "...", "payerName": "..." }`, exige Origin allowlisted y `Authorization: Bearer <Firebase ID token>` con email verificado para el proyecto configurado. El bookingId cumple `^[A-Za-z0-9_-]{4,64}$`. El importe siempre es `client_apps.deposit_default`; cualquier `amount` enviado por el navegador se ignora. Devuelve `{ "init_point": "...", "status": "pending" }`; repite URL para cobros pendientes, `409 already_paid` para reservas aprobadas y `409 not_connected` si falta conexión MP. `GET /api/v1/browser/charges/{bookingId}?app=<slug>` devuelve solo `{ "status": "none|pending|approved|rejected|..." }`, sin importe. Los tres endpoints soportan CORS preflight y validan Origin contra apps activas. Las solicitudes de cobro generan acción de auditoría `browser_charge`.\n\n## Crear cobro\n
 
-`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "amount": 1000, "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. `amount` es el importe a cobrar, en pesos enteros ARS de 1 a 1.000.000; se rechazan con 400 valores fraccionarios, no numéricos, menores a 1 o mayores al tope. Si se omite, `client_apps.deposit_default` se usa como valor de compatibilidad y debe ser válido. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. Si `bookingId` ya tiene un cobro pendiente vigente para esa app, la API devuelve el mismo `checkoutUrl` cuando el importe coincide; si se reutiliza el mismo `bookingId` con otro importe, responde `409 { "error": "booking_amount_conflict" }`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; si `client_apps.connection_id` es `null` o la conexión está ausente/inactiva produce `409 { "error": "connection_unavailable" }` con las cabeceras CORS del Origin autorizado; no se crea un claim ni se llama a Mercado Pago. Las apps nuevas pueden registrar cobros solo después de que la dueña complete la autorización por invitación.
+`POST /api/v1/charges` acepta JSON `{ "bookingId": "...", "payerRef": "user-opaque-id", "amount": 1000, "payerEmail": "person@example.test", "returnUrl": "https://shop.example.test/booking/123" }` y requiere autenticación API key y `Origin` permitido. `bookingId` y `payerRef` identifican la reserva/usuario en el sistema de la app cliente; PayAlert no consulta la reserva ni Firestore. `payerEmail` es opcional. `amount` es el importe a cobrar, en pesos enteros ARS de 1 a 1.000.000; se rechazan con 400 valores fraccionarios, no numéricos, menores a 1 o mayores al tope. Si se omite, `client_apps.deposit_default` se usa como valor de compatibilidad y debe ser válido. `maxInstallments` es opcional (entero 1 a 24) y limita la cantidad máxima de cuotas en el checkout (`payment_methods.installments` de la preferencia); si es inválido responde `400 { "error": "invalid_max_installments" }` y si se omite no cambia nada. `returnUrl` es obligatorio y debe comenzar con un valor de `allowed_origins`. Si `bookingId` ya tiene un cobro pendiente vigente para esa app, la API devuelve el mismo `checkoutUrl` cuando el importe coincide; si se reutiliza el mismo `bookingId` con otro importe, responde `409 { "error": "booking_amount_conflict" }`. La preferencia usa la conexión Mercado Pago de esa app, vence en 15 minutos y lleva `X-Idempotency-Key`. Responde `{ "chargeId": "...", "checkoutUrl": "...", "expiresAt": "...", "status": "pending" }`; si `client_apps.connection_id` es `null` o la conexión está ausente/inactiva produce `409 { "error": "connection_unavailable" }` con las cabeceras CORS del Origin autorizado; no se crea un claim ni se llama a Mercado Pago. Las apps nuevas pueden registrar cobros solo después de que la dueña complete la autorización por invitación.
 
-El cobro es idempotente por app+booking. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
+Los campos opcionales de la preferencia se configuran por cobro:
+
+| Campo | Validación | Efecto en Mercado Pago |
+| --- | --- | --- |
+| `title` | String, 1..120 caracteres después de trim, sin caracteres de control Unicode (tampoco en los extremos). | `items[0].title`; tiene prioridad sobre `client_apps.item_title` y luego `Seña`. Inválido: `400 invalid_title`. |
+| `description` | String de hasta 255 caracteres; admite vacío, se envía sin modificar. | `items[0].description` solo si se envía. Inválido: `400 invalid_description`. |
+| `excludeCash` | Booleano estricto. | Si es `true`, agrega `payment_methods.excluded_payment_types: [{"id":"ticket"},{"id":"atm"}]` (excluye Pago Fácil, Rapipago y cajeros), conservando `installments` si también se envía `maxInstallments`. Inválido: `400 invalid_exclude_cash`. |
+
+Omitir estos campos conserva exactamente el payload anterior y el comportamiento de Huellitas. `excludeCash: false` no agrega exclusiones. `null` no equivale a omitir un campo y se rechaza. Los errores se devuelven como `{ "error": "<código>" }`, con las cabeceras CORS del origen autorizado y antes de crear cobros o llamar a Mercado Pago.
+
+Ejemplo para Showroom Isabella (desde su servidor, con la API key fuera del navegador):
+
+```json
+{
+  "bookingId": "pedido-123",
+  "payerRef": "cliente-456",
+  "amount": 25000,
+  "returnUrl": "https://shop.example.test/pedidos/123",
+  "title": "Vestido Isabella",
+  "description": "Pedido 123 - talle M",
+  "excludeCash": true,
+  "maxInstallments": 3
+}
+```
+
+El cobro es idempotente por app+booking. Reintentar con el mismo `bookingId` e importe reutiliza el checkout existente: cambiar título, descripción, cuotas o exclusiones no modifica una preferencia ya creada; se requiere un nuevo pedido/cobro para aplicar opciones nuevas. El navegador debe invocar esta ruta con `Origin` autorizado; `OPTIONS` debe permitir CORS solo para origins autorizados.
 
 ## Consultar estado
 

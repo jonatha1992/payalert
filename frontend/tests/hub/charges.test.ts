@@ -56,6 +56,77 @@ describe('POST /api/v1/charges', () => {
     expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2, booking_id: 'b1', client_app_id: 'app-1' }));
     expect(mocks.updateCharge).toHaveBeenCalledWith('charge-1', { status: 'pending', preference_id: 'pref-1', init_point: 'https://mp.test/pref' });
   });
+  it('uses the trimmed per-charge title instead of the app title', async () => {
+    vi.mocked(authenticateClientApp).mockResolvedValue({ app: { ...mocks.app, item_title: 'Seña' }, response: null } as never);
+    expect((await POST(request({ title: '  Vestido Isabella  ' }))).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).items[0].title).toBe('Vestido Isabella');
+  });
+  it.each(['', '   ', 'a'.repeat(121), 'Vestido\nIsabella', '\tVestido', 'Vestido\u0000', 'Vestido\u007f', 'Vestido\u0085', 123, null, {}, []])('rejects invalid title %j before side effects', async (title) => {
+    const response = await POST(request({ title }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_title' });
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://shop.test');
+    expect(mocks.getService).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it.each(['a', 'a'.repeat(120)])('accepts boundary title %j', async (title) => {
+    expect((await POST(request({ title }))).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).items[0].title).toBe(title);
+  });
+  it.each(['', 'Pedido 123: vestido talle M', 'a'.repeat(255)])('forwards description %j unchanged', async (description) => {
+    expect((await POST(request({ description }))).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).items[0].description).toBe(description);
+  });
+  it.each(['a'.repeat(256), 123, null, {}, []])('rejects invalid description %j before side effects', async (description) => {
+    const response = await POST(request({ description }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_description' });
+    expect(mocks.getService).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it.each([undefined, 1, 24])('excludes ticket and atm while preserving maxInstallments %s', async (maxInstallments) => {
+    expect((await POST(request({ excludeCash: true, maxInstallments, title: 'Vestido', description: 'Pedido 123' }))).status).toBe(200);
+    const payload = JSON.parse(mocks.fetch.mock.calls[0][1].body);
+    expect(payload.items[0]).toEqual({ title: 'Vestido', description: 'Pedido 123', quantity: 1, currency_id: 'ARS', unit_price: 5000 });
+    expect(payload.payment_methods).toEqual({
+      ...(maxInstallments === undefined ? {} : { installments: maxInstallments }),
+      excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
+    });
+  });
+  it.each([false, undefined])('preserves the exact legacy payload for excludeCash %s', async (excludeCash) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    try {
+      expect((await POST(request({ excludeCash }))).status).toBe(200);
+      expect(JSON.parse(mocks.fetch.mock.calls[0][1].body)).toEqual({
+        items: [{ title: 'Seña', quantity: 1, currency_id: 'ARS', unit_price: 5000 }],
+        external_reference: 'opaque-ref', notification_url: 'https://api.test/api/webhooks/mercadopago',
+        back_urls: { success: 'https://shop.test/booking/1', failure: 'https://shop.test/booking/1', pending: 'https://shop.test/booking/1' },
+        auto_return: 'approved', expires: true, date_of_expiration: '2030-01-01T00:15:00.000Z', marketplace_fee: 1,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it.each(['true', 0, 1, null, {}, []])('rejects invalid excludeCash %j before side effects', async (excludeCash) => {
+    const response = await POST(request({ excludeCash }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_exclude_cash' });
+    expect(mocks.getService).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it.each(['  Cuota mensual  ', 'a'.repeat(121), '', null])('preserves the configured app title fallback %j', async (item_title) => {
+    vi.mocked(authenticateClientApp).mockResolvedValue({ app: { ...mocks.app, item_title }, response: null } as never);
+    expect((await POST(request())).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).items[0].title).toBe((item_title?.trim() || 'Seña').slice(0, 120));
+  });
+  it('preserves installments when excludeCash is false', async () => {
+    expect((await POST(request({ excludeCash: false, maxInstallments: 3 }))).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).payment_methods).toEqual({ installments: 3 });
+  });
   it('accepts an explicit amount of 2500 ARS', async () => { const response = await POST(request({ bookingId: 'b1', amount: 2500 })); expect(response.status).toBe(200); expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 2500 })); const [, init] = mocks.fetch.mock.calls[0]; expect(JSON.parse(init.body).items[0].unit_price).toBe(2500); });
   it.each([0, -1, 1.5, 1_000_001, '100'])('rejects invalid amount %s before accessing the connection', async (amount) => { const response = await POST(request({ bookingId: 'b1', amount })); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'amount_must_be_integer_ars_between_1_and_1000000' }); expect(mocks.getService).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.fetch).not.toHaveBeenCalled(); });
   it('rejects an invalid configured default when amount is omitted', async () => { vi.mocked(authenticateClientApp).mockResolvedValue({ app: { ...mocks.app, deposit_default: null }, response: null } as never); const response = await POST(request({ bookingId: 'b1' })); expect(response.status).toBe(400); expect(mocks.create).not.toHaveBeenCalled(); });
@@ -65,5 +136,7 @@ describe('POST /api/v1/charges', () => {
   it('does not read Firestore booking state', async () => { const response = await POST(request({ app: 'demo', bookingId: 'b1' })); expect(response.status).toBe(200); expect(mocks.getBooking).not.toHaveBeenCalled(); });
   it('deletes the claim and rolls back the creating booking payment when Mercado Pago fails', async () => { mocks.fetch.mockResolvedValue({ ok: false, status: 502 }); const response = await POST(request({ app: 'demo', bookingId: 'b1' })); expect(response.status).toBe(500); expect(mocks.deleteCharge).toHaveBeenCalledWith('charge-1'); });
   it('returns the saved init point when the charge already exists at the same amount', async () => { mocks.create.mockResolvedValue({ created: false, charge: { id: 'existing', amount: 1000, init_point: 'https://mp.test/old', expires_at: '2030-01-01T00:00:00.000Z', status: 'pending' } }); const response = await POST(request({ app: 'demo', bookingId: 'b1', amount: 1000 })); expect(await response.json()).toMatchObject({ chargeId: 'existing', checkoutUrl: 'https://mp.test/old' }); expect(mocks.fetch).not.toHaveBeenCalled(); });
+  it('adds payment_methods.installments only when maxInstallments is sent', async () => { await POST(request({ maxInstallments: 3 })); expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).payment_methods).toEqual({ installments: 3 }); mocks.fetch.mockClear(); await POST(request({ bookingId: 'b2' })); expect(JSON.parse(mocks.fetch.mock.calls[0][1].body)).not.toHaveProperty('payment_methods'); });
+  it.each([0, 25, 1.5, '3', null])('rejects invalid maxInstallments %s', async (maxInstallments) => { const response = await POST(request({ maxInstallments })); expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'invalid_max_installments' }); expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.fetch).not.toHaveBeenCalled(); });
   it('rejects amount conflict on idempotent booking id reuse', async () => { mocks.create.mockResolvedValue({ created: false, charge: { id: 'existing', amount: 1000, init_point: 'https://mp.test/old', status: 'pending' } }); const response = await POST(request({ app: 'demo', bookingId: 'b1', amount: 2000 })); expect(response.status).toBe(409); expect(await response.json()).toEqual({ error: 'booking_amount_conflict' }); expect(mocks.fetch).not.toHaveBeenCalled(); });
 });

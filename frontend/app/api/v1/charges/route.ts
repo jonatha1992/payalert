@@ -9,13 +9,21 @@ import { decryptSecret } from '@/lib/payments/secretBox';
 import { computeFee } from '@/lib/server/hubFee';
 
 function jsonError(error: string, status: number, headers: Record<string, string> = {}) { return NextResponse.json({ error }, { status, headers }); }
-function validBody(value: unknown): value is { bookingId: string; payerRef: string; amount?: number; payerEmail?: string; returnUrl: string } {
+function validInstallments(value: unknown): boolean { return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 24; }
+function validTitle(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length >= 1 && value.trim().length <= 120 && !/\p{Cc}/u.test(value);
+}
+function validBody(value: unknown): value is { bookingId: string; payerRef: string; amount?: number; payerEmail?: string; maxInstallments?: number; title?: string; description?: string; excludeCash?: boolean; returnUrl: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return typeof body.bookingId === 'string' && !!body.bookingId.trim()
     && typeof body.payerRef === 'string' && !!body.payerRef.trim()
     && (body.amount === undefined || (typeof body.amount === 'number' && Number.isInteger(body.amount) && body.amount >= 1 && body.amount <= 1_000_000))
     && (body.payerEmail === undefined || typeof body.payerEmail === 'string')
+    && (body.maxInstallments === undefined || validInstallments(body.maxInstallments))
+    && (body.title === undefined || validTitle(body.title))
+    && (body.description === undefined || (typeof body.description === 'string' && body.description.length <= 255))
+    && (body.excludeCash === undefined || typeof body.excludeCash === 'boolean')
     && typeof body.returnUrl === 'string' && !!body.returnUrl.trim();
 }
 function chargeAmount(body: { amount?: number }, fallback: unknown): number | null {
@@ -46,6 +54,10 @@ export async function POST(request: NextRequest) {
     if (!validBody(body)) {
       const raw = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
       if (raw?.amount !== undefined && !(typeof raw.amount === 'number' && Number.isInteger(raw.amount) && raw.amount >= 1 && raw.amount <= 1_000_000)) return jsonError('amount_must_be_integer_ars_between_1_and_1000000', 400, headers);
+      if (raw?.maxInstallments !== undefined && !validInstallments(raw.maxInstallments)) return jsonError('invalid_max_installments', 400, headers);
+      if (raw?.title !== undefined && !validTitle(raw.title)) return jsonError('invalid_title', 400, headers);
+      if (raw?.description !== undefined && !(typeof raw.description === 'string' && raw.description.length <= 255)) return jsonError('invalid_description', 400, headers);
+      if (raw?.excludeCash !== undefined && typeof raw.excludeCash !== 'boolean') return jsonError('invalid_exclude_cash', 400, headers);
       return jsonError('invalid_request', 400, headers);
     }
     if (!app.allowed_origins.some((allowed) => body.returnUrl.startsWith(allowed))) return jsonError('return_url_denied', 400, headers);
@@ -72,13 +84,23 @@ export async function POST(request: NextRequest) {
     }
     claimedId = claim.charge.id;
     const payload = {
-      items: [{ title: (app.item_title?.trim() || 'Seña').slice(0, 120), quantity: 1, currency_id: 'ARS', unit_price: amount }],
+      items: [{
+        title: body.title?.trim() ?? (app.item_title?.trim() || 'Seña').slice(0, 120),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        quantity: 1, currency_id: 'ARS', unit_price: amount,
+      }],
       payer: body.payerEmail ? { email: body.payerEmail } : undefined,
       external_reference: externalReference,
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
       back_urls: { success: body.returnUrl, failure: body.returnUrl, pending: body.returnUrl },
       auto_return: 'approved', expires: true, date_of_expiration: expires.toISOString(),
       ...(feeResult.fee > 0 ? { marketplace_fee: feeResult.fee } : {}),
+      ...(body.maxInstallments !== undefined || body.excludeCash === true ? {
+        payment_methods: {
+          ...(body.maxInstallments !== undefined ? { installments: body.maxInstallments } : {}),
+          ...(body.excludeCash === true ? { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }] } : {}),
+        },
+      } : {}),
     };
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idempotencyKey }, body: JSON.stringify(payload),

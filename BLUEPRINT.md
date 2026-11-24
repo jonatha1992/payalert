@@ -8,6 +8,10 @@
 - `NEXT_PUBLIC_*` entran como build args; `output: standalone` solo con `DOCKER_BUILD=1` (Dockerfile) para no afectar Vercel.
 - Correos transaccionales: cliente `frontend/lib/server/correoCentral.ts` contra `correo-central` (`CORREO_CENTRAL_URL`, `CORREO_CENTRAL_KEY`), cableado en `processWebhook` (`emailNotifications.ts`) para usuarios con `email_enabled=true` sin bloquear el ACK de webhooks.
 
+- `POST /api/v1/charges` acepta `maxInstallments` opcional (1..24) -> `payment_methods.installments` en la preferencia MP; sin el campo el payload no cambia.
+- Por cobro admite `title` (trim, 1..120, sin controles Unicode), `description` (string hasta 255, sin modificar) y `excludeCash` booleano. El título prevalece sobre `app.item_title`/`Seña`; `excludeCash: true` excluye `ticket` y `atm`, combinado con cuotas. Devuelve errores 400 específicos antes de efectos externos. Omitir campos mantiene Huellitas sin cambios; no requiere migraciones ni cambios de datos. Reutilizar booking/importe conserva la preferencia existente, incluidas sus opciones.
+- Control Apps verificado: `payalert` tiene `test.deploy=false`, sin configuración de preview; `main.deploy=true`. Promover a `test` no publica una vista previa con la configuración actual. Producción queda pendiente de aprobación explícita y promoción `test -> main`.
+
 ## Pendientes
 - `MP_OAUTH_REDIRECT_URI` sigue apuntando a `payalert-kappa.vercel.app`; migrar la URL registrada en Mercado Pago y el webhook antes de apagar Vercel.
 - Apagar Vercel (el cron de `vercel.json` duplica al de `payalert-cron`).
