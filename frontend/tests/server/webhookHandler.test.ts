@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
-  enqueue: vi.fn(), findConnectionByProviderAccount: vi.fn(), findConnectionByOrder: vi.fn(), findConnectionById: vi.fn(),
+  enqueue: vi.fn(), processBatch: vi.fn(), findConnectionByProviderAccount: vi.fn(), findConnectionByOrder: vi.fn(), findConnectionById: vi.fn(),
   fetchTransaction: vi.fn(), sendPushToBusiness: vi.fn(), sendPaymentEmailToBusiness: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/server/hubWebhook', () => ({ applyHubPayment: vi.fn() }));
 vi.mock('@/lib/server/webhookQueue', () => ({ WebhookQueue: vi.fn(() => ({ enqueue: mocks.enqueue })) }));
+vi.mock('@/lib/server/webhookWorker', () => ({ processBatch: mocks.processBatch }));
 vi.mock('@/lib/server/session', () => ({ getServiceClient: vi.fn(() => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) })) }));
 vi.mock('@/lib/server/paymentsRepository', () => ({ SupabasePaymentsRepository: vi.fn(() => ({
   findConnectionByProviderAccount: mocks.findConnectionByProviderAccount,
@@ -40,7 +41,7 @@ beforeEach(() => {
   mocks.findConnectionByOrder.mockResolvedValue(connection);
   mocks.findConnectionById.mockResolvedValue(connection);
   mocks.enqueue.mockResolvedValue('enqueued');
-  
+  mocks.processBatch.mockResolvedValue({ claimed: 1, done: 1, failed: 0, dead: 0 });
 });
 
 describe('fast webhook acknowledgement', () => {
@@ -114,6 +115,62 @@ describe('fast webhook acknowledgement', () => {
       { businessId: 'biz-1', storeId: 'store-1' },
       { transactionId: 'tx-99', amount: 2500, currency: 'ARS', provider: 'uala', occurredAt: '2026-11-23T12:00:00.000Z' },
     );
+    errorSpy.mockRestore();
+  });
+
+  it('schedules immediate background drain after ACK when enqueue returns enqueued', async () => {
+    let scheduledTask: (() => Promise<void>) | undefined;
+    const schedule = vi.fn((task: () => Promise<void>) => { scheduledTask = task; });
+
+    const response = await handleProviderWebhook(
+      'mercado_pago',
+      request({ user_id: 'acct', data: { id: 'payment-10' } }),
+      schedule,
+    );
+
+    expect(response.status).toBe(200);
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(mocks.processBatch).not.toHaveBeenCalled();
+
+    await scheduledTask?.();
+    expect(mocks.processBatch).toHaveBeenCalledTimes(1);
+    expect(mocks.processBatch).toHaveBeenCalledWith(expect.objectContaining({ queue: expect.anything() }), 5);
+  });
+
+  it('does not schedule immediate drain when enqueue returns duplicate', async () => {
+    mocks.enqueue.mockResolvedValue('duplicate');
+    const schedule = vi.fn();
+
+    const response = await handleProviderWebhook(
+      'mercado_pago',
+      request({ user_id: 'acct', data: { id: 'dup-1' } }),
+      schedule,
+    );
+
+    expect(response.status).toBe(200);
+    expect(schedule).not.toHaveBeenCalled();
+    expect(mocks.processBatch).not.toHaveBeenCalled();
+  });
+
+  it('catches immediate drain failures safely without propagating or logging sensitive data', async () => {
+    let scheduledTask: (() => Promise<void>) | undefined;
+    const schedule = vi.fn((task: () => Promise<void>) => { scheduledTask = task; });
+    mocks.processBatch.mockRejectedValueOnce(new Error('secret-token-leak payload-123'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await handleProviderWebhook(
+      'mercado_pago',
+      request({ user_id: 'acct', data: { id: 'payment-fail' } }),
+      schedule,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(scheduledTask?.()).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const logged = String(errorSpy.mock.calls[0]?.[0] ?? '');
+    expect(logged).toBe(JSON.stringify({ event: 'webhook_immediate_drain_failed', provider: 'mercado_pago' }));
+    expect(logged).not.toContain('secret-token-leak');
+    expect(logged).not.toContain('payload-123');
     errorSpy.mockRestore();
   });
 });

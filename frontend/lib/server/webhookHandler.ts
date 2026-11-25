@@ -1,5 +1,5 @@
 // Server-only module: shared fast-ACK handler and queued webhook processor.
-import { NextResponse, type NextRequest } from 'next/server';
+import { after, NextResponse, type NextRequest } from 'next/server';
 import { getConnector } from '@/lib/payments/connectors';
 import { ingestWebhook, type IngestResult } from '@/lib/payments/ingest';
 import type { PaymentConnector, Provider, WebhookRequest } from '@/lib/payments/types';
@@ -7,10 +7,26 @@ import { sendPushToBusiness } from '@/lib/server/push';
 import { sendPaymentEmailToBusiness } from '@/lib/server/emailNotifications';
 import { SupabasePaymentsRepository } from '@/lib/server/paymentsRepository';
 import { WebhookQueue } from '@/lib/server/webhookQueue';
+import { processBatch } from '@/lib/server/webhookWorker';
 import { getServiceClient } from '@/lib/server/session';
 import { applyHubPayment } from '@/lib/server/hubWebhook';
 
 const MAX_BODY_BYTES = 256 * 1024;
+const IMMEDIATE_DRAIN_LIMIT = 5;
+
+export type BackgroundScheduler = (task: () => Promise<void>) => void;
+
+function scheduleAfterResponse(task: () => Promise<void>): void {
+  try {
+    after(task);
+  } catch (error) {
+    const nextCode = error && typeof error === 'object' && '__NEXT_ERROR_CODE' in error
+      ? (error as { __NEXT_ERROR_CODE?: unknown }).__NEXT_ERROR_CODE
+      : null;
+    if (nextCode === 'E468') return;
+    console.error(JSON.stringify({ event: 'webhook_immediate_drain_schedule_failed' }));
+  }
+}
 
 export async function toWebhookRequest(request: NextRequest): Promise<WebhookRequest> {
   const headers: Record<string, string> = {};
@@ -80,7 +96,11 @@ export async function processWebhook(
   return result;
 }
 
-export async function handleProviderWebhook(provider: Provider, request: NextRequest): Promise<NextResponse> {
+export async function handleProviderWebhook(
+  provider: Provider,
+  request: NextRequest,
+  schedule: BackgroundScheduler = scheduleAfterResponse,
+): Promise<NextResponse> {
   const rawBody = await request.text();
   if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) return NextResponse.json({ received: false }, { status: 413 });
   const headers: Record<string, string> = {};
@@ -104,7 +124,20 @@ export async function handleProviderWebhook(provider: Provider, request: NextReq
   const parsed = getConnector(provider).parseWebhook(webhookRequest, connection);
   if (parsed.kind === 'rejected') return NextResponse.json({ received: false }, { status: 401 });
   if (parsed.kind === 'ignored') return NextResponse.json({ received: true }, { status: 200 });
-  await new WebhookQueue(db).enqueue({ provider, connection_id: connection.id,
-    dedupe_key: parsed.externalId, payload: { rawBody, headers, query } });
+  const enqueueResult = await new WebhookQueue(db).enqueue({
+    provider,
+    connection_id: connection.id,
+    dedupe_key: parsed.externalId,
+    payload: { rawBody, headers, query },
+  });
+  if (enqueueResult === 'enqueued') {
+    schedule(async () => {
+      try {
+        await processBatch({ queue: new WebhookQueue(db) }, IMMEDIATE_DRAIN_LIMIT);
+      } catch {
+        console.error(JSON.stringify({ event: 'webhook_immediate_drain_failed', provider }));
+      }
+    });
+  }
   return NextResponse.json({ received: true }, { status: 200 });
 }
